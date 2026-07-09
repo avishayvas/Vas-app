@@ -4,6 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#1B1F2A">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
 <title>VAS Security · ניהול פרויקטים</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%231B1F2A'/><text x='50' y='68' font-size='48' font-weight='900' text-anchor='middle' fill='%23C9962E' font-family='Arial'>V</text></svg>">
 <style>
@@ -166,6 +171,7 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
+db.enablePersistence({ synchronizeTabs: true }).catch(e => console.warn('persistence:', e.code));
 const DOC = db.collection('vas').doc('punch');
 const PHOTOS = db.collection('vas');
 
@@ -837,6 +843,9 @@ function importBackup(e){
   };
   reader.readAsText(file);
   e.target.value = '';
+}
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(()=>{}));
 }
 function copyViewLink(){
   const url = location.origin + location.pathname + '?view=1';
