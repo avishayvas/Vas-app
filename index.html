@@ -551,11 +551,11 @@ function openTaskForm(id){
   const f = t || { projectId:(S.projects.find(p=>p.active)||{}).id||'', title:'', location:'', discipline:'כללי', assignee:'', urgency:'רגיל', status:'פתוח', due:'', notes:'' };
   modalShell(t?'עריכת משימה':'משימה חדשה', `
     <label>פרויקט</label>
-    <select id="tf_proj">${S.projects.filter(p=>p.active).map(p=>`<option value="${p.id}"${f.projectId===p.id?' selected':''}>${esc(p.name)}</option>`).join('')}</select>
+    <select id="tf_proj" onchange="tfRenderLoc()">${S.projects.filter(p=>p.active).map(p=>`<option value="${p.id}"${f.projectId===p.id?' selected':''}>${esc(p.name)}</option>`).join('')}</select>
     <label>תיאור המשימה / הליקוי *</label>
     <input id="tf_title" value="${esc(f.title)}" placeholder="לדוגמה: השחלת CAT-6A גרעין א׳ קומות 5–8">
-    <label>מיקום (קומה / גרעין / אזור)</label>
-    <input id="tf_loc" value="${esc(f.location)}" placeholder="קומה 12 · גרעין ב׳">
+    <label>מיקום (קומה / גרעין / אזור / סניף)</label>
+    <div id="tf_locwrap"><input id="tf_loc" value="${esc(f.location)}" placeholder="קומה 12 · גרעין ב׳"></div>
     <div class="form-2col">
       <div><label>דיסציפלינה</label>
         <select id="tf_disc">${DISCIPLINES.map(d=>`<option${f.discipline===d?' selected':''}>${d}</option>`).join('')}</select></div>
@@ -579,6 +579,7 @@ function openTaskForm(id){
       ${(t&&isAdmin())?`<button class="btn-danger" onclick="deleteTask('${t.id}')">מחיקה</button>`:''}
       <button class="btn-primary" onclick="saveTask('${t?t.id:''}')">שמירה</button>
     </div>`);
+  tfRenderLoc(f.location || '');
   renderFormPhotos();
   attachMediaInput();
 }
@@ -1025,6 +1026,21 @@ const MAXSTOCK_BRANCHES = [
   { n:"מקס טל חנן — נשר", m:"סאלח", p:"052-7076050" }
 ];
 function branchByName(n){ return MAXSTOCK_BRANCHES.find(b=>b.n===n); }
+function tfRenderLoc(keepVal){
+  const wrap = document.getElementById('tf_locwrap'); if (!wrap) return;
+  const cur = document.getElementById('tf_loc');
+  const keep = (typeof keepVal === 'string') ? keepVal : (cur ? cur.value : '');
+  const projSel = document.getElementById('tf_proj');
+  const p = S.projects.find(x=>x.id===(projSel?projSel.value:''));
+  const isMax = p && p.name.indexOf('מקס') !== -1;
+  if (isMax) {
+    const opts = MAXSTOCK_BRANCHES.map(b=>b.n);
+    const extra = (keep && opts.indexOf(keep) === -1) ? `<option selected>${esc(keep)}</option>` : '';
+    wrap.innerHTML = `<select id="tf_loc"><option value="">— בחרו סניף —</option>${extra}${opts.map(o=>`<option${keep===o?' selected':''}>${esc(o)}</option>`).join('')}</select>`;
+  } else {
+    wrap.innerHTML = `<input id="tf_loc" value="${esc(keep)}" placeholder="קומה 12 · גרעין ב׳">`;
+  }
+}
 function siteList(){ return [...S.projects.filter(p=>p.active).map(p=>p.name), ...MAXSTOCK_BRANCHES.map(b=>b.n)]; }
 function siteOptions(cur){
   const projs = S.projects.filter(p=>p.active).map(p=>p.name);
