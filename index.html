@@ -233,7 +233,7 @@ let S = null;
 let tab = 'home';
 let filters = { proj:'all', status:'open', assignee:'all' };
 let callsShowClosed = false;
-let reportProj = '', reportPerson = '';
+let reportProj = '', reportPerson = '', reportDate = today();
 const photoCache = {};
 
 const uid = () => Math.random().toString(36).slice(2,9) + Date.now().toString(36).slice(-4);
@@ -866,10 +866,73 @@ function buildPersonReport(person){
   msg += '\n\nבהצלחה! 💪';
   return msg;
 }
+function buildDailyReport(d){
+  const dispD = fmtDate(d);
+  const doneT = S.tasks.filter(t => (t.closedAt === d) || (t.updatedAt === d && (t.status === 'בוצע' || t.status === 'אושר')));
+  const doneC = S.calls.filter(c => (c.closedAt === d) || (c.updatedAt === d && c.status === 'נסגרה'));
+  const openT = S.tasks.filter(t => t.status === 'פתוח' || t.status === 'בטיפול');
+  const openC = S.calls.filter(c => c.status !== 'נסגרה');
+  const newT = S.tasks.filter(t => t.created === d).length;
+  const newC = S.calls.filter(c => c.created === d).length;
+  const ups = [...S.tasks, ...S.calls].filter(x => x.upsell && x.updatedAt === d);
+
+  let msg = `*דוח יומי — ${dispD}*\n`;
+  if (newT || newC) msg += `נפתחו היום: ${newT} משימות, ${newC} קריאות\n`;
+
+  msg += `\n✅ *בוצע היום (${doneT.length + doneC.length}):*\n`;
+  if (!doneT.length && !doneC.length) msg += `— אין סגירות היום\n`;
+  doneT.forEach(t => {
+    msg += `🔹 ${projName(t.projectId)} — ${t.title}`;
+    if (t.report) msg += ` | ${t.report}`;
+    if (t.qty) msg += ` (${t.qty})`;
+    if (t.updatedBy) msg += ` — ${t.updatedBy}`;
+    msg += `\n`;
+  });
+  doneC.forEach(c => {
+    msg += `🛠️ קריאה: ${c.customer} — ${c.desc}`;
+    if (c.report) msg += ` | ${c.report}`;
+    if (c.closedBy || c.updatedBy) msg += ` — ${c.closedBy || c.updatedBy}`;
+    msg += `\n`;
+  });
+
+  msg += `\n⏳ *נותר לביצוע (${openT.length + openC.length}):*\n`;
+  if (!openT.length && !openC.length) msg += `— הכל סגור! 🎉\n`;
+  const byProj = {};
+  openT.forEach(t => { const k = projName(t.projectId); (byProj[k] = byProj[k] || []).push(t); });
+  Object.entries(byProj).forEach(([proj, arr]) => {
+    msg += `📁 *${proj}:*\n`;
+    arr.forEach(t => {
+      const flag = t.urgency === 'דחוף' ? '🔴' : t.urgency === 'גבוה' ? '🟠' : '▫️';
+      msg += `${flag} ${t.title}${t.location ? ' (' + t.location + ')' : ''} — ${t.status}${t.assignee ? ' · ' + t.assignee : ''}${isOverdue(t) ? ' ⚠️ באיחור' : ''}\n`;
+    });
+  });
+  if (openC.length) {
+    msg += `🛠️ *קריאות פתוחות:*\n`;
+    openC.forEach(c => { msg += `▫️ ${c.customer} — ${c.desc} (${c.status})${c.technician ? ' · ' + c.technician : ''}\n`; });
+  }
+
+  if (ups.length) {
+    msg += `\n💰 *מכירות/לידים שנרשמו היום:*\n`;
+    ups.forEach(u => { msg += `▫️ ${u.upsellType ? '[' + u.upsellType + '] ' : ''}${u.upsell}${u.upsellAmt ? ' — ' + u.upsellAmt + ' ₪' : ''} (${u.updatedBy || u.createdBy || ''})\n`; });
+  }
+
+  msg += `\n_VAS Security — ש.ו טכנולוגיות ביטחון_`;
+  return msg;
+}
 function renderReports(){
+  const dailyRep = buildDailyReport(reportDate);
   const projRep = reportProj ? buildProjReport(reportProj) : '';
   const persRep = reportPerson ? buildPersonReport(reportPerson) : '';
   return `
+    <div class="card">
+      <div class="card-title">📅 דוח יומי — בוצע / נותר לביצוע</div>
+      <input type="date" value="${esc(reportDate)}" onchange="reportDate=this.value;render()">
+      <pre class="report-preview">${esc(dailyRep)}</pre>
+      <div class="form-actions">
+        <button class="btn-secondary" onclick="copyReport('daily')">📋 העתקה</button>
+        <button class="btn-primary" onclick="waReport('daily')">💬 שליחה בוואטסאפ</button>
+      </div>
+    </div>
     <div class="card">
       <div class="card-title">📁 דוח מצב לפרויקט</div>
       <select onchange="reportProj=this.value;render()">
@@ -896,11 +959,11 @@ function renderReports(){
     </div>`;
 }
 function copyReport(kind){
-  const text = kind==='proj' ? buildProjReport(reportProj) : buildPersonReport(reportPerson);
+  const text = kind==='daily' ? buildDailyReport(reportDate) : kind==='proj' ? buildProjReport(reportProj) : buildPersonReport(reportPerson);
   copyText(text); toastMsg('הועתק — אפשר להדביק בוואטסאפ');
 }
 function waReport(kind){
-  const text = kind==='proj' ? buildProjReport(reportProj) : buildPersonReport(reportPerson);
+  const text = kind==='daily' ? buildDailyReport(reportDate) : kind==='proj' ? buildProjReport(reportProj) : buildPersonReport(reportPerson);
   window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
 }
 
