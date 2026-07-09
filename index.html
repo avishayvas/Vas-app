@@ -233,7 +233,7 @@ let S = null;
 let tab = 'home';
 let filters = { proj:'all', status:'open', assignee:'all' };
 let callsShowClosed = false;
-let reportProj = '', reportPerson = '', reportDate = today();
+let reportProj = '', reportPerson = '', reportDate = '';
 const photoCache = {};
 
 const uid = () => Math.random().toString(36).slice(2,9) + Date.now().toString(36).slice(-4);
@@ -920,6 +920,7 @@ function buildDailyReport(d){
   return msg;
 }
 function renderReports(){
+  if (!reportDate) reportDate = today();
   const dailyRep = buildDailyReport(reportDate);
   const projRep = reportProj ? buildProjReport(reportProj) : '';
   const persRep = reportPerson ? buildPersonReport(reportPerson) : '';
