@@ -464,6 +464,17 @@ function renderHome(){
         <button class="btn-mini" style="background:#D64545" onclick="denyClaim('${r.kind}','${r.x.id}')">✕ דחייה</button>
         </div></div></div>`).join('') + `</div>`;
     })()}
+    ${(()=>{ if(!isAdmin()) return '';
+      const ups = [...S.tasks.filter(t=>t.upsell).map(t=>({who:t.updatedBy||t.createdBy||'', what:t.upsell, amt:parseFloat(t.upsellAmt)||0, d:t.updatedAt||t.created})), ...S.calls.filter(c=>c.upsell).map(c=>({who:c.updatedBy||c.createdBy||'', what:c.upsell, amt:parseFloat(c.upsellAmt)||0, d:c.updatedAt||c.created}))];
+      if(!ups.length) return '';
+      const month = today().slice(0,7);
+      const mTotal = ups.filter(u=>(u.d||'').slice(0,7)===month).reduce((s,u)=>s+u.amt,0);
+      ups.sort((a,b)=>(b.d||'').localeCompare(a.d||''));
+      return `<div class="card"><div class="card-title" style="color:#3E8E5A">💰 מכירות נוספות${mTotal?` — ${mTotal.toLocaleString()} ₪ החודש`:''}</div>` + ups.slice(0,5).map(u=>`
+        <div class="mini-task" style="cursor:default"><span class="dot" style="background:#3E8E5A"></span>
+        <div><div class="mini-task-title">${esc(u.what)}${u.amt?` — ${u.amt.toLocaleString()} ₪`:''}</div>
+        <div class="mini-task-sub">${esc(u.who)} · ${fmtDate(u.d||'')}</div></div></div>`).join('') + `</div>`;
+    })()}
     <div class="card">
       <div class="card-title">קריאות שירות פתוחות</div>
       ${openCalls.length===0 ? '<div class="empty">אין קריאות פתוחות 👌</div>' :
@@ -527,6 +538,7 @@ function taskCard(t){
         ${t.closedBy?`<span>🔒 ${esc(t.closedBy)}</span>`:''}
       </div>
       ${t.notes?`<div class="task-notes">📝 ${esc(t.notes)}</div>`:''}
+      ${t.upsell?`<div class="task-notes" style="background:#EFF7F0;color:#2C6E48;font-weight:600">💰 מכירה נוספת: ${esc(t.upsell)}${t.upsellAmt?` — ${esc(t.upsellAmt)} ₪`:''}${t.updatedBy?` (${esc(t.updatedBy)})`:''}</div>`:''}
       ${mediaStrip(taskMedia(t))}
       ${claimBlock('task', t)}
     </div>`;
@@ -572,6 +584,11 @@ function openTaskForm(id){
     <input id="tf_due" type="date" value="${esc(f.due)}">
     <label>הערות</label>
     <textarea id="tf_notes" rows="2" placeholder="פרטים נוספים, חומרים, תיאום…">${esc(f.notes)}</textarea>
+    <label style="color:#3E8E5A">💰 מכירה נוספת ללקוח (אם בוצעה)</label>
+    <div class="form-2col">
+      <div><input id="tf_upsell" value="${esc(f.upsell||'')}" placeholder="לדוגמה: מפצל HDMI + התקנה"></div>
+      <div><input id="tf_upsellamt" value="${esc(f.upsellAmt||'')}" inputmode="decimal" placeholder="סכום ב-₪"></div>
+    </div>
     <label>תמונות / סרטונים (עד 4)</label>
     <div class="photo-row" id="tf_photos"></div>
     <input id="tf_file" type="file" accept="image/*,video/*" style="display:none">
@@ -607,6 +624,10 @@ async function saveTask(id){
   t.status = document.getElementById('tf_status').value;
   t.due = document.getElementById('tf_due').value;
   t.notes = document.getElementById('tf_notes').value.trim();
+  const prevUpsT = t.upsell || '';
+  t.upsell = (document.getElementById('tf_upsell')||{value:''}).value.trim();
+  t.upsellAmt = (document.getElementById('tf_upsellamt')||{value:''}).value.trim().replace(/[^0-9.]/g,'');
+  if (t.upsell && t.upsell !== prevUpsT) pushLog('💰 מכירה נוספת (' + (t.upsellAmt||'?') + ' ₪): ' + t.upsell);
   t.updatedBy = USER; t.updatedAt = today();
   if (!id) t.createdBy = USER;
   if (t.status === 'אושר'){ if (!t.closedBy){ t.closedBy = USER; t.closedAt = today(); } }
@@ -661,6 +682,7 @@ function renderCalls(){
         </div>
         ${c.phone?`<div class="task-meta"><a href="tel:${esc(c.phone)}">📞 ${esc(c.phone)}</a></div>`:''}
         ${c.notes?`<div class="task-notes">📝 ${esc(c.notes)}</div>`:''}
+        ${c.upsell?`<div class="task-notes" style="background:#EFF7F0;color:#2C6E48;font-weight:600">💰 מכירה נוספת: ${esc(c.upsell)}${c.upsellAmt?` — ${esc(c.upsellAmt)} ₪`:''}${c.updatedBy?` (${esc(c.updatedBy)})`:''}</div>`:''}
         ${mediaStrip(c.media)}
         ${claimBlock('call', c)}
       </div>`).join('')}
@@ -702,6 +724,11 @@ function openCallForm(id){
     <select id="cf_status">${CALL_STATUSES.map(s=>`<option${f.status===s?' selected':''}>${s}</option>`).join('')}</select>
     <label>הערות</label>
     <textarea id="cf_notes" rows="2">${esc(f.notes)}</textarea>
+    <label style="color:#3E8E5A">💰 מכירה נוספת ללקוח (אם בוצעה)</label>
+    <div class="form-2col">
+      <div><input id="tf_upsell" value="${esc(f.upsell||'')}" placeholder="לדוגמה: מפצל HDMI + התקנה"></div>
+      <div><input id="tf_upsellamt" value="${esc(f.upsellAmt||'')}" inputmode="decimal" placeholder="סכום ב-₪"></div>
+    </div>
     <label>תמונות / סרטונים (עד 4)</label>
     <div class="photo-row" id="tf_photos"></div>
     <input id="tf_file" type="file" accept="image/*,video/*" style="display:none">
@@ -725,6 +752,10 @@ async function saveCall(id){
   c.urgency = document.getElementById('cf_urg').value;
   c.status = document.getElementById('cf_status').value;
   c.notes = document.getElementById('cf_notes').value.trim();
+  const prevUpsC = c.upsell || '';
+  c.upsell = (document.getElementById('tf_upsell')||{value:''}).value.trim();
+  c.upsellAmt = (document.getElementById('tf_upsellamt')||{value:''}).value.trim().replace(/[^0-9.]/g,'');
+  if (c.upsell && c.upsell !== prevUpsC) pushLog('💰 מכירה נוספת (' + (c.upsellAmt||'?') + ' ₪): ' + c.upsell);
   c.updatedBy = USER; c.updatedAt = today();
   if (!id) c.createdBy = USER;
   pushLog((id?'עדכן':'פתח') + ' קריאה: ' + c.customer);
