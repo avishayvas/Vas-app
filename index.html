@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#1B1F2A">
 <link rel="manifest" href="manifest.json">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="apple-touch-icon" sizes="180x180" href="icon-180.png">
+<meta name="apple-mobile-web-app-title" content="VAS">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
@@ -126,6 +127,9 @@ main { padding: 14px 14px 20px; max-width: 760px; margin: 0 auto; }
 
 .readonly-banner { background: #C9962E; color: #1B1F2A; text-align: center; font-weight: 800; font-size: 13px; padding: 6px; }
 
+.vid-thumb { width: 54px; height: 54px; border-radius: 8px; background: #1B1F2A; color: #C9962E; display: flex; align-items: center; justify-content: center; font-size: 20px; cursor: pointer; border: 1px solid #E2DFD5; flex-shrink: 0; }
+.photo-thumb .vid-thumb { width: 64px; height: 64px; border-radius: 10px; }
+.claim-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; background: #FBF7EE; border: 1px solid #F0E6CF; padding: 8px 10px; border-radius: 8px; font-size: 13px; }
 @media (max-width: 400px) {
   .kpi-value { font-size: 24px; }
   .proj-bar-name { width: 44%; font-size: 12px; }
@@ -154,9 +158,10 @@ main { padding: 14px 14px 20px; max-width: 760px; margin: 0 auto; }
 <nav class="vas-nav" id="nav"></nav>
 
 <div class="toast" id="toast"></div>
-<div class="photo-overlay" id="photoOverlay" onclick="closePhoto()">
+<div class="photo-overlay" id="photoOverlay" onclick="if(event.target===this)closeMedia()">
   <img id="photoOverlayImg" alt="">
-  <div>✕ סגירה</div>
+  <video id="photoOverlayVid" controls playsinline webkit-playsinline style="max-width:94vw;max-height:80vh;border-radius:10px;display:none"></video>
+  <div onclick="closeMedia()">✕ סגירה</div>
 </div>
 <div id="modalRoot"></div>
 
@@ -277,22 +282,58 @@ function persist(){
 }
 
 /* ---------- photos in Firestore ---------- */
-async function loadPhotoDoc(id){
+async function loadMediaDoc(id){
   if (photoCache[id]) return photoCache[id];
   try {
     const snap = await PHOTOS.doc(id).get();
-    if (snap.exists) { photoCache[id] = snap.data().data; return photoCache[id]; }
+    if (!snap.exists) return null;
+    const d = snap.data();
+    if (d.data) { photoCache[id] = d.data; return d.data; }
+    if (d.chunks) {
+      let full = '';
+      for (let i = 0; i < d.chunks; i++){
+        const c = await PHOTOS.doc(id + '_c' + i).get();
+        if (!c.exists) return null;
+        full += c.data().data;
+      }
+      photoCache[id] = full;
+      return full;
+    }
   } catch(e){ console.error(e); }
   return null;
 }
+function loadPhotoDoc(id){ return loadMediaDoc(id); }
 function hydratePhotos(){
   document.querySelectorAll('img[data-photoid]').forEach(async img => {
     const data = await loadPhotoDoc(img.dataset.photoid);
     if (data) img.src = data;
   });
 }
-async function savePhotoDoc(id, data){ await PHOTOS.doc(id).set({ data }); photoCache[id] = data; }
-async function deletePhotoDocs(ids){ for (const id of (ids||[])) { try { await PHOTOS.doc(id).delete(); } catch(e){} delete photoCache[id]; } }
+const CHUNK_SIZE = 900000;
+async function saveMediaDoc(id, data){
+  if (data.length <= CHUNK_SIZE) {
+    await PHOTOS.doc(id).set({ data });
+  } else {
+    const n = Math.ceil(data.length / CHUNK_SIZE);
+    for (let i = 0; i < n; i++) await PHOTOS.doc(id + '_c' + i).set({ data: data.slice(i*CHUNK_SIZE, (i+1)*CHUNK_SIZE) });
+    await PHOTOS.doc(id).set({ chunks: n });
+  }
+  photoCache[id] = data;
+}
+async function deleteMediaDocs(ids){
+  for (const id of (ids||[])) {
+    try {
+      const snap = await PHOTOS.doc(id).get();
+      if (snap.exists && snap.data().chunks) {
+        for (let i = 0; i < snap.data().chunks; i++){ try { await PHOTOS.doc(id + '_c' + i).delete(); } catch(e){} }
+      }
+      await PHOTOS.doc(id).delete();
+    } catch(e){}
+    delete photoCache[id];
+  }
+}
+function savePhotoDoc(id, data){ return saveMediaDoc(id, data); }
+function deletePhotoDocs(ids){ return deleteMediaDocs(ids); }
 
 /* ==================== UI helpers ==================== */
 let toastTimer;
@@ -302,14 +343,8 @@ function toastMsg(msg){
   clearTimeout(toastTimer);
   toastTimer = setTimeout(()=> t.style.display='none', 2200);
 }
-function openPhoto(id){
-  const ov = document.getElementById('photoOverlay');
-  const img = document.getElementById('photoOverlayImg');
-  img.src = photoCache[id] || '';
-  ov.style.display = 'flex';
-  if (!photoCache[id]) loadPhotoDoc(id).then(d => { if(d) img.src = d; });
-}
-function closePhoto(){ document.getElementById('photoOverlay').style.display = 'none'; }
+function openPhoto(id){ openMedia(id, 'image'); }
+function closePhoto(){ closeMedia(); }
 function closeModal(){ document.getElementById('modalRoot').innerHTML = ''; }
 function modalShell(title, bodyHtml){
   document.getElementById('modalRoot').innerHTML = `
@@ -397,6 +432,7 @@ function renderHome(){
       ${kpi('באיחור', overdue.length, '#8E44AD')}
       ${kpi('ממתינות לאישור', waiting.length, '#3B6EA5')}
     </div>
+    ${isAdmin() ? pendingCard() : ''}
     <div class="card">
       <div class="card-title">פתוחות לפי פרויקט</div>
       ${byProj.length===0 ? '<div class="empty">אין משימות עדיין — התחילו בלשונית משימות</div>' :
@@ -477,9 +513,11 @@ function taskCard(t){
         ${t.due?`<span class="${isOverdue(t)?'overdue':''}">📅 ${fmtDate(t.due)}${isOverdue(t)?' ⚠️':''}</span>`:''}
         ${t.createdBy?`<span>👤 ${esc(t.createdBy)}</span>`:''}
         ${(t.updatedBy&&t.updatedBy!==t.createdBy)?`<span>✏️ ${esc(t.updatedBy)}</span>`:''}
+        ${t.closedBy?`<span>🔒 ${esc(t.closedBy)}</span>`:''}
       </div>
       ${t.notes?`<div class="task-notes">📝 ${esc(t.notes)}</div>`:''}
-      ${(t.photoIds&&t.photoIds.length)?`<div class="task-photos">${t.photoIds.map(id=>`<img data-photoid="${id}" onclick="openPhoto('${id}')" alt="">`).join('')}</div>`:''}
+      ${mediaStrip(taskMedia(t))}
+      ${claimBlock('task', t)}
     </div>`;
 }
 function cycleTaskStatus(id){
@@ -487,6 +525,7 @@ function cycleTaskStatus(id){
   const t = S.tasks.find(x=>x.id===id); if(!t) return;
   t.status = STATUSES[(STATUSES.indexOf(t.status)+1)%STATUSES.length];
   t.updatedBy = USER; t.updatedAt = today();
+  if (t.status === 'אושר'){ t.closedBy = USER; t.closedAt = today(); }
   pushLog('עדכן סטטוס "' + t.title + '" ל-' + t.status);
   persist(); render(); toastMsg('סטטוס עודכן: '+t.status);
 }
@@ -496,7 +535,7 @@ let pendingPhotos = []; // {id?, data} — data present for new, id for existing
 function openTaskForm(id){
   if (!guardEdit()) return;
   const t = id ? S.tasks.find(x=>x.id===id) : null;
-  pendingPhotos = t ? (t.photoIds||[]).map(pid=>({id:pid})) : [];
+  pendingPhotos = t ? taskMedia(t).map(m=>({ id: m.id, kind: m.kind })) : [];
   const f = t || { projectId:(S.projects.find(p=>p.active)||{}).id||'', title:'', location:'', discipline:'כללי', assignee:'', urgency:'רגיל', status:'פתוח', due:'', notes:'' };
   modalShell(t?'עריכת משימה':'משימה חדשה', `
     <label>פרויקט</label>
@@ -521,31 +560,21 @@ function openTaskForm(id){
     <input id="tf_due" type="date" value="${esc(f.due)}">
     <label>הערות</label>
     <textarea id="tf_notes" rows="2" placeholder="פרטים נוספים, חומרים, תיאום…">${esc(f.notes)}</textarea>
-    <label>תמונות (עד 4)</label>
+    <label>תמונות / סרטונים (עד 4)</label>
     <div class="photo-row" id="tf_photos"></div>
-    <input id="tf_file" type="file" accept="image/*" style="display:none">
+    <input id="tf_file" type="file" accept="image/*,video/*" style="display:none">
     <div class="form-actions">
       ${(t&&isAdmin())?`<button class="btn-danger" onclick="deleteTask('${t.id}')">מחיקה</button>`:''}
       <button class="btn-primary" onclick="saveTask('${t?t.id:''}')">שמירה</button>
     </div>`);
   renderFormPhotos();
-  document.getElementById('tf_file').onchange = async e => {
-    const file = e.target.files && e.target.files[0];
-    if (!file) return;
-    if (pendingPhotos.length>=4){ toastMsg('עד 4 תמונות למשימה'); return; }
-    try {
-      const data = await compressImage(file);
-      pendingPhotos.push({ data });
-      renderFormPhotos();
-    } catch(err){ toastMsg('שגיאה בטעינת התמונה'); }
-    e.target.value = '';
-  };
+  attachMediaInput();
 }
 function renderFormPhotos(){
   const el = document.getElementById('tf_photos'); if(!el) return;
   el.innerHTML = pendingPhotos.map((p,i)=>`
     <div class="photo-thumb">
-      <img ${p.data?`src="${p.data}"`:`data-photoid="${p.id}"`} alt="">
+      ${p.kind==='video' ? `<div class="vid-thumb">▶</div>` : `<img ${p.data?`src="${p.data}"`:`data-photoid="${p.id}"`} alt="">`}
       <button onclick="pendingPhotos.splice(${i},1);renderFormPhotos()">✕</button>
     </div>`).join('') + `<button class="photo-add" onclick="document.getElementById('tf_file').click()">📷</button>`;
   hydratePhotos();
@@ -554,7 +583,7 @@ async function saveTask(id){
   const title = document.getElementById('tf_title').value.trim();
   if (!title){ toastMsg('חסר תיאור למשימה'); return; }
   const t = id ? S.tasks.find(x=>x.id===id) : { id: uid(), created: today() };
-  const oldIds = id ? (t.photoIds||[]).slice() : [];
+  const oldIds = id ? taskMedia(t).map(m=>m.id) : [];
 
   t.projectId = document.getElementById('tf_proj').value;
   t.title = title;
@@ -567,17 +596,20 @@ async function saveTask(id){
   t.notes = document.getElementById('tf_notes').value.trim();
   t.updatedBy = USER; t.updatedAt = today();
   if (!id) t.createdBy = USER;
+  if (t.status === 'אושר' && !t.closedBy){ t.closedBy = USER; t.closedAt = today(); }
   pushLog((id?'עדכן':'פתח') + ' משימה: ' + t.title);
 
   toastMsg('שומר…');
-  const ids = [];
+  const media = [];
   for (const p of pendingPhotos){
-    if (p.id) ids.push(p.id);
-    else { const pid = 'ph_' + uid(); await savePhotoDoc(pid, p.data); ids.push(pid); }
+    if (p.id) media.push({ id: p.id, kind: p.kind || 'image' });
+    else { const pid = 'ph_' + uid(); await saveMediaDoc(pid, p.data); media.push({ id: pid, kind: p.kind || 'image' }); }
   }
-  t.photoIds = ids;
-  const removed = oldIds.filter(x=>!ids.includes(x));
-  if (removed.length) deletePhotoDocs(removed);
+  t.media = media;
+  delete t.photoIds;
+  const newIds = media.map(m=>m.id);
+  const removed = oldIds.filter(x=>!newIds.includes(x));
+  if (removed.length) deleteMediaDocs(removed);
 
   if (!id) S.tasks.unshift(t);
   await persist();
@@ -588,7 +620,7 @@ async function deleteTask(id){
   if (!confirm('למחוק את המשימה?')) return;
   const _t = S.tasks.find(x=>x.id===id); pushLog('מחק משימה: ' + (_t?_t.title:''));
   const t = S.tasks.find(x=>x.id===id);
-  if (t && t.photoIds) deletePhotoDocs(t.photoIds);
+  if (t) deleteMediaDocs(taskMedia(t).map(m=>m.id));
   S.tasks = S.tasks.filter(x=>x.id!==id);
   await persist();
   closeModal(); render(); toastMsg('המשימה נמחקה');
@@ -610,9 +642,13 @@ function renderCalls(){
           ${c.technician?`<span>👷 ${esc(c.technician)}</span>`:''}
           <span>⚡ ${esc(c.urgency)}</span>
           <span>📅 ${fmtDate(c.created)}</span>
+          ${c.createdBy?`<span>👤 ${esc(c.createdBy)}</span>`:''}
+          ${c.closedBy?`<span>🔒 ${esc(c.closedBy)}</span>`:''}
         </div>
         ${c.phone?`<div class="task-meta"><a href="tel:${esc(c.phone)}">📞 ${esc(c.phone)}</a></div>`:''}
         ${c.notes?`<div class="task-notes">📝 ${esc(c.notes)}</div>`:''}
+        ${mediaStrip(c.media)}
+        ${claimBlock('call', c)}
       </div>`).join('')}
     ${READONLY?'':'<button class="fab" onclick="openCallForm()">＋ קריאה חדשה</button>'}`;
 }
@@ -621,6 +657,7 @@ function cycleCallStatus(id){
   const c = S.calls.find(x=>x.id===id); if(!c) return;
   c.status = CALL_STATUSES[(CALL_STATUSES.indexOf(c.status)+1)%CALL_STATUSES.length];
   c.updatedBy = USER; c.updatedAt = today();
+  if (c.status === 'נסגרה'){ c.closedBy = USER; c.closedAt = today(); }
   pushLog('עדכן קריאה "' + c.customer + '" ל-' + c.status);
   persist(); render(); toastMsg('סטטוס: '+c.status);
 }
@@ -628,9 +665,14 @@ function openCallForm(id){
   if (!guardEdit()) return;
   const c = id ? S.calls.find(x=>x.id===id) : null;
   const f = c || { customer:'', desc:'', phone:'', technician:'', urgency:'רגיל', status:'חדשה', notes:'' };
+  pendingPhotos = c ? (c.media||[]).map(m=>({ id: m.id, kind: m.kind })) : [];
+  const known = !f.customer || siteList().includes(f.customer);
   modalShell(c?'עריכת קריאה':'קריאת שירות חדשה', `
     <label>לקוח / אתר *</label>
-    <input id="cf_customer" value="${esc(f.customer)}" placeholder="מקס סטוק חולון">
+    <select id="cf_site" onchange="document.getElementById('cf_customer_other').style.display = this.value==='__other' ? '' : 'none'">
+      ${siteOptions(f.customer)}
+    </select>
+    <input id="cf_customer_other" placeholder="שם הלקוח / האתר" value="${known ? '' : esc(f.customer)}" style="margin-top:8px;${known ? 'display:none' : ''}">
     <label>תיאור התקלה *</label>
     <input id="cf_desc" value="${esc(f.desc)}" placeholder="מצלמה 4 לא מקליטה">
     <label>טלפון איש קשר</label>
@@ -645,16 +687,23 @@ function openCallForm(id){
     <select id="cf_status">${CALL_STATUSES.map(s=>`<option${f.status===s?' selected':''}>${s}</option>`).join('')}</select>
     <label>הערות</label>
     <textarea id="cf_notes" rows="2">${esc(f.notes)}</textarea>
+    <label>תמונות / סרטונים (עד 4)</label>
+    <div class="photo-row" id="tf_photos"></div>
+    <input id="tf_file" type="file" accept="image/*,video/*" style="display:none">
     <div class="form-actions">
       ${(c&&isAdmin())?`<button class="btn-danger" onclick="deleteCall('${c.id}')">מחיקה</button>`:''}
       <button class="btn-primary" onclick="saveCall('${c?c.id:''}')">שמירה</button>
     </div>`);
+  renderFormPhotos();
+  attachMediaInput();
 }
 async function saveCall(id){
-  const customer = document.getElementById('cf_customer').value.trim();
+  let customer = document.getElementById('cf_site').value;
+  if (customer === '__other') customer = document.getElementById('cf_customer_other').value.trim();
   const desc = document.getElementById('cf_desc').value.trim();
   if (!customer || !desc){ toastMsg('חסרים לקוח או תיאור'); return; }
   const c = id ? S.calls.find(x=>x.id===id) : { id: uid(), created: today() };
+  const oldIds = id ? (c.media||[]).map(m=>m.id) : [];
   c.customer = customer; c.desc = desc;
   c.phone = document.getElementById('cf_phone').value.trim();
   c.technician = document.getElementById('cf_tech').value;
@@ -664,6 +713,16 @@ async function saveCall(id){
   c.updatedBy = USER; c.updatedAt = today();
   if (!id) c.createdBy = USER;
   pushLog((id?'עדכן':'פתח') + ' קריאה: ' + c.customer);
+  if (c.status === 'נסגרה' && !c.closedBy){ c.closedBy = USER; c.closedAt = today(); }
+  toastMsg('שומר…');
+  const cMedia = [];
+  for (const p of pendingPhotos){
+    if (p.id) cMedia.push({ id: p.id, kind: p.kind || 'image' });
+    else { const pid = 'ph_' + uid(); await saveMediaDoc(pid, p.data); cMedia.push({ id: pid, kind: p.kind || 'image' }); }
+  }
+  c.media = cMedia;
+  const cRemoved = oldIds.filter(x=>!cMedia.map(m=>m.id).includes(x));
+  if (cRemoved.length) deleteMediaDocs(cRemoved);
   if (!id) S.calls.unshift(c);
   await persist();
   closeModal(); render(); toastMsg('הקריאה נשמרה ✓');
@@ -672,6 +731,7 @@ async function deleteCall(id){
   if (!isAdmin()) { toastMsg('מחיקה למנהלים בלבד'); return; }
   if (!confirm('למחוק את הקריאה?')) return;
   const _c = S.calls.find(x=>x.id===id); pushLog('מחק קריאה: ' + (_c?_c.customer:''));
+  if (_c && _c.media) deleteMediaDocs(_c.media.map(m=>m.id));
   S.calls = S.calls.filter(x=>x.id!==id);
   await persist();
   closeModal(); render(); toastMsg('הקריאה נמחקה');
@@ -840,7 +900,7 @@ async function deleteProj(id){
   if (!isAdmin()) { toastMsg('מחיקה למנהלים בלבד'); return; }
   const count = S.tasks.filter(t=>t.projectId===id).length;
   if (!confirm(count ? `לפרויקט יש ${count} משימות שיימחקו יחד איתו. למחוק?` : 'למחוק את הפרויקט?')) return;
-  S.tasks.filter(t=>t.projectId===id).forEach(t=>{ if(t.photoIds) deletePhotoDocs(t.photoIds); });
+  S.tasks.filter(t=>t.projectId===id).forEach(t=>deleteMediaDocs(taskMedia(t).map(m=>m.id)));
   S.tasks = S.tasks.filter(t=>t.projectId!==id);
   S.projects = S.projects.filter(x=>x.id!==id);
   await persist(); closeModal(); render(); toastMsg('הפרויקט נמחק');
@@ -904,6 +964,110 @@ function importBackup(e){
   };
   reader.readAsText(file);
   e.target.value = '';
+}
+const MAXSTOCK_BRANCHES = ["מקס סטוק — אור עקיבא","מקס סטוק — חולון","מקס סטוק — נוף הגליל","מקס סטוק — נתניה איילון","מקס סטוק — נתניה פולג","מקס סטוק — עפולה"];
+function siteList(){ return [...S.projects.filter(p=>p.active).map(p=>p.name), ...MAXSTOCK_BRANCHES]; }
+function siteOptions(cur){
+  const list = siteList();
+  return list.map(s=>`<option value="${esc(s)}"${cur===s?' selected':''}>${esc(s)}</option>`).join('')
+    + `<option value="__other"${(cur && !list.includes(cur))?' selected':''}>אחר…</option>`;
+}
+const taskMedia = t => t.media || (t.photoIds||[]).map(id=>({ id, kind:'image' }));
+function mediaStrip(list){
+  if (!list || !list.length) return '';
+  return `<div class="task-photos">${list.map(m => m.kind==='video'
+    ? `<div class="vid-thumb" onclick="openMedia('${m.id}','video')">▶</div>`
+    : `<img data-photoid="${m.id}" onclick="openMedia('${m.id}','image')" alt="">`).join('')}</div>`;
+}
+async function openMedia(id, kind){
+  const ov = document.getElementById('photoOverlay');
+  const img = document.getElementById('photoOverlayImg');
+  const vid = document.getElementById('photoOverlayVid');
+  img.style.display = kind==='video' ? 'none' : '';
+  vid.style.display = kind==='video' ? '' : 'none';
+  img.removeAttribute('src'); vid.removeAttribute('src');
+  ov.style.display = 'flex';
+  const data = await loadMediaDoc(id);
+  if (!data){ toastMsg('לא ניתן לטעון את הקובץ'); return; }
+  if (kind==='video') vid.src = data; else img.src = data;
+}
+function closeMedia(){
+  const vid = document.getElementById('photoOverlayVid');
+  try { vid.pause(); } catch(e){}
+  vid.removeAttribute('src');
+  document.getElementById('photoOverlay').style.display = 'none';
+}
+function attachMediaInput(){
+  const el = document.getElementById('tf_file'); if (!el) return;
+  el.onchange = async e => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    if (pendingPhotos.length >= 4){ toastMsg('עד 4 קבצים לפריט'); e.target.value=''; return; }
+    try {
+      if (file.type.startsWith('video')){
+        if (file.size > 8*1024*1024){ toastMsg('סרטון עד 8MB — צלמו סרטון קצר יותר'); e.target.value=''; return; }
+        const data = await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(file); });
+        pendingPhotos.push({ data, kind:'video' });
+      } else {
+        const data = await compressImage(file);
+        pendingPhotos.push({ data, kind:'image' });
+      }
+      renderFormPhotos();
+    } catch(err){ toastMsg('שגיאה בטעינת הקובץ'); }
+    e.target.value = '';
+  };
+}
+function _find(kind, id){ return kind==='task' ? S.tasks.find(x=>x.id===id) : S.calls.find(x=>x.id===id); }
+function claimBlock(kind, x){
+  if (READONLY || !USER) return '';
+  const req = x.claimReq;
+  if (req){
+    if (isAdmin()) return `<div class="claim-row">🙋 <b>${esc(req.by)}</b> מבקש לקחת
+      <button class="btn-mini" onclick="approveClaim('${kind}','${x.id}')">אישור</button>
+      <button class="btn-mini" style="background:#D64545" onclick="denyClaim('${kind}','${x.id}')">דחייה</button></div>`;
+    if (req.by === USER) return `<div class="claim-row">⏳ הבקשה שלך ממתינה לאישור מנהל</div>`;
+    return `<div class="claim-row">🙋 ${esc(req.by)} ביקש לקחת את הפריט</div>`;
+  }
+  const assignee = kind==='task' ? x.assignee : x.technician;
+  const closed = kind==='task' ? x.status==='אושר' : x.status==='נסגרה';
+  if (!isAdmin() && !closed && assignee !== USER)
+    return `<div class="claim-row"><button class="btn-mini" style="background:#3B6EA5" onclick="requestClaim('${kind}','${x.id}')">🙋 בקש לקחת אליי</button></div>`;
+  return '';
+}
+function requestClaim(kind, id){
+  if (!guardEdit()) return;
+  const x = _find(kind, id); if (!x) return;
+  x.claimReq = { by: USER, d: fmtDate(today()) };
+  pushLog('ביקש לקחת ' + (kind==='task' ? 'משימה: ' + x.title : 'קריאה: ' + x.customer));
+  persist(); render(); toastMsg('הבקשה נשלחה למנהל 🙋');
+}
+function approveClaim(kind, id){
+  if (!isAdmin()){ toastMsg('אישור בקשות למנהלים בלבד'); return; }
+  const x = _find(kind, id); if (!x || !x.claimReq) return;
+  const who = x.claimReq.by;
+  if (kind==='task') x.assignee = who; else x.technician = who;
+  x.claimReq = null;
+  pushLog('אישר העברת ' + (kind==='task'?'משימה':'קריאה') + ' ל-' + who);
+  persist(); render(); toastMsg('אושר — הועבר ל' + who + ' ✓');
+}
+function denyClaim(kind, id){
+  if (!isAdmin()){ toastMsg('אישור בקשות למנהלים בלבד'); return; }
+  const x = _find(kind, id); if (!x) return;
+  pushLog('דחה בקשה של ' + (x.claimReq ? x.claimReq.by : ''));
+  x.claimReq = null;
+  persist(); render(); toastMsg('הבקשה נדחתה');
+}
+function pendingCard(){
+  const reqs = [
+    ...S.tasks.filter(t=>t.claimReq).map(t=>({ kind:'task', x:t, label:t.title })),
+    ...S.calls.filter(c=>c.claimReq).map(c=>({ kind:'call', x:c, label:c.customer + ' — ' + c.desc }))
+  ];
+  if (!reqs.length) return '';
+  return `<div class="card"><div class="card-title urgent-title">🙋 בקשות ממתינות לאישור (${reqs.length})</div>
+    ${reqs.map(r=>`<div class="claim-row"><b>${esc(r.x.claimReq.by)}</b> ← ${esc(r.label)}
+      <button class="btn-mini" onclick="approveClaim('${r.kind}','${r.x.id}')">אישור</button>
+      <button class="btn-mini" style="background:#D64545" onclick="denyClaim('${r.kind}','${r.x.id}')">דחייה</button></div>`).join('')}
+  </div>`;
 }
 function showUserModal(){
   const team = (S && S.team && S.team.length) ? S.team : [];
