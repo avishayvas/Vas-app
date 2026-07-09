@@ -453,6 +453,17 @@ function renderHome(){
             <div class="mini-task-sub">${esc(projName(t.projectId))} · ${esc(t.assignee||'לא שובץ')}</div></div>
           </div>`).join('')}
       </div>` : ''}
+    ${(()=>{ if(!isAdmin()) return '';
+      const reqs = [...S.tasks.filter(t=>t.claimReq).map(t=>({x:t,kind:'task',label:t.title})), ...S.calls.filter(c=>c.claimReq).map(c=>({x:c,kind:'call',label:c.customer}))];
+      if(!reqs.length) return '';
+      return `<div class="card"><div class="card-title" style="color:#C9962E">🙋 בקשות ממתינות לאישורך</div>` + reqs.map(r=>`
+        <div class="mini-task" style="cursor:default"><span class="dot" style="background:#C9962E"></span>
+        <div style="flex:1"><div class="mini-task-title">${esc(r.x.claimReq.by)} מבקש: ${esc(r.label)}</div>
+        <div class="claim-row" style="margin-top:6px;border:none;background:none;padding:0">
+        <button class="btn-mini" style="background:#3E8E5A" onclick="approveClaim('${r.kind}','${r.x.id}')">✓ אישור</button>
+        <button class="btn-mini" style="background:#D64545" onclick="denyClaim('${r.kind}','${r.x.id}')">✕ דחייה</button>
+        </div></div></div>`).join('') + `</div>`;
+    })()}
     <div class="card">
       <div class="card-title">קריאות שירות פתוחות</div>
       ${openCalls.length===0 ? '<div class="empty">אין קריאות פתוחות 👌</div>' :
@@ -526,6 +537,7 @@ function cycleTaskStatus(id){
   t.status = STATUSES[(STATUSES.indexOf(t.status)+1)%STATUSES.length];
   t.updatedBy = USER; t.updatedAt = today();
   if (t.status === 'אושר'){ t.closedBy = USER; t.closedAt = today(); }
+  else { t.closedBy = ''; t.closedAt = ''; }
   pushLog('עדכן סטטוס "' + t.title + '" ל-' + t.status);
   persist(); render(); toastMsg('סטטוס עודכן: '+t.status);
 }
@@ -596,7 +608,8 @@ async function saveTask(id){
   t.notes = document.getElementById('tf_notes').value.trim();
   t.updatedBy = USER; t.updatedAt = today();
   if (!id) t.createdBy = USER;
-  if (t.status === 'אושר' && !t.closedBy){ t.closedBy = USER; t.closedAt = today(); }
+  if (t.status === 'אושר'){ if (!t.closedBy){ t.closedBy = USER; t.closedAt = today(); } }
+  else { t.closedBy = ''; t.closedAt = ''; }
   pushLog((id?'עדכן':'פתח') + ' משימה: ' + t.title);
 
   toastMsg('שומר…');
@@ -658,6 +671,7 @@ function cycleCallStatus(id){
   c.status = CALL_STATUSES[(CALL_STATUSES.indexOf(c.status)+1)%CALL_STATUSES.length];
   c.updatedBy = USER; c.updatedAt = today();
   if (c.status === 'נסגרה'){ c.closedBy = USER; c.closedAt = today(); }
+  else { c.closedBy = ''; c.closedAt = ''; }
   pushLog('עדכן קריאה "' + c.customer + '" ל-' + c.status);
   persist(); render(); toastMsg('סטטוס: '+c.status);
 }
@@ -713,7 +727,8 @@ async function saveCall(id){
   c.updatedBy = USER; c.updatedAt = today();
   if (!id) c.createdBy = USER;
   pushLog((id?'עדכן':'פתח') + ' קריאה: ' + c.customer);
-  if (c.status === 'נסגרה' && !c.closedBy){ c.closedBy = USER; c.closedAt = today(); }
+  if (c.status === 'נסגרה'){ if (!c.closedBy){ c.closedBy = USER; c.closedAt = today(); } }
+  else { c.closedBy = ''; c.closedAt = ''; }
   toastMsg('שומר…');
   const cMedia = [];
   for (const p of pendingPhotos){
