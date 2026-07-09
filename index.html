@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1B1F2A">
+<title>VAS Security · ניהול פרויקטים</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%231B1F2A'/><text x='50' y='68' font-size='48' font-weight='900' text-anchor='middle' fill='%23C9962E' font-family='Arial'>V</text></svg>">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800;900&display=swap');
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: 'Heebo', sans-serif;
+  background: #F5F3ED;
+  min-height: 100vh;
+  color: #1B1F2A;
+  padding-bottom: 84px;
+}
+.vas-header {
+  background: #1B1F2A; color: #fff;
+  padding: 14px 18px 12px;
+  display: flex; justify-content: space-between; align-items: center;
+  position: sticky; top: 0; z-index: 20;
+}
+.vas-brand { font-weight: 900; font-size: 21px; letter-spacing: 1px; color: #C9962E; }
+.vas-brand span { color: #fff; font-weight: 300; font-size: 15px; letter-spacing: 3px; }
+.vas-sub { font-size: 12px; color: #9AA0AE; margin-top: 1px; }
+.vas-side { text-align: left; }
+.vas-date { font-size: 13px; color: #C9962E; font-weight: 600; }
+.conn { font-size: 11px; font-weight: 700; }
+.conn.on { color: #5CB87A; } .conn.off { color: #D64545; }
+main { padding: 14px 14px 20px; max-width: 760px; margin: 0 auto; }
+
+.kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+.kpi { background: #fff; border-radius: 12px; padding: 12px 14px; border-inline-start: 5px solid #ccc; box-shadow: 0 1px 3px rgba(27,31,42,.07); }
+.kpi-value { font-size: 28px; font-weight: 800; line-height: 1; }
+.kpi-label { font-size: 12px; color: #6B7080; margin-top: 4px; font-weight: 500; }
+
+.card { background: #fff; border-radius: 12px; padding: 14px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(27,31,42,.07); }
+.card-title { font-weight: 700; font-size: 15px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+.urgent-title { color: #D64545; }
+.empty { color: #8A8F9C; font-size: 14px; padding: 8px 0; text-align: center; }
+
+.proj-bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.proj-bar-name { width: 38%; font-size: 13px; font-weight: 600; }
+.proj-bar-track { flex: 1; background: #EFEDE6; border-radius: 6px; height: 14px; overflow: hidden; }
+.proj-bar-fill { height: 100%; background: #C9962E; border-radius: 6px; transition: width .4s; }
+.proj-bar-num { width: 24px; text-align: center; font-weight: 700; font-size: 13px; }
+
+.mini-task { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid #F0EEE7; cursor: pointer; }
+.mini-task:last-child { border-bottom: none; }
+.mini-task .dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; }
+.mini-task-title { font-size: 14px; font-weight: 600; }
+.mini-task-sub { font-size: 12px; color: #6B7080; }
+
+.filter-row { display: flex; gap: 8px; margin-bottom: 12px; overflow-x: auto; padding-bottom: 2px; }
+.filter-row select { flex: 1; min-width: 110px; padding: 9px 10px; border-radius: 10px; border: 1.5px solid #E2DFD5; background: #fff; font-family: inherit; font-size: 13px; font-weight: 500; }
+
+.task-card { background: #fff; border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; border-inline-start: 5px solid #ccc; box-shadow: 0 1px 3px rgba(27,31,42,.07); }
+.task-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.task-title { font-weight: 700; font-size: 15px; cursor: pointer; flex: 1; }
+.status-chip { border: none; color: #fff; font-family: inherit; font-weight: 700; font-size: 12px; padding: 5px 12px; border-radius: 999px; cursor: pointer; flex-shrink: 0; }
+.task-meta { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 7px; font-size: 12.5px; color: #555B69; cursor: pointer; }
+.task-meta .overdue { color: #D64545; font-weight: 700; }
+.task-meta a { color: #3B6EA5; text-decoration: none; font-weight: 600; }
+.task-notes { margin-top: 6px; font-size: 12.5px; color: #6B7080; background: #FAF9F4; border-radius: 8px; padding: 6px 10px; }
+.task-photos { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.task-photos img { width: 54px; height: 54px; object-fit: cover; border-radius: 8px; cursor: pointer; border: 1px solid #E2DFD5; background: #EFEDE6; }
+
+.fab { position: fixed; bottom: 78px; inset-inline-start: 16px; z-index: 25; background: #C9962E; color: #fff; border: none; border-radius: 999px; padding: 13px 20px; font-family: inherit; font-weight: 800; font-size: 15px; box-shadow: 0 4px 14px rgba(201,150,46,.45); cursor: pointer; }
+
+.vas-nav { position: fixed; bottom: 0; inset-inline: 0; z-index: 30; background: #1B1F2A; display: flex; padding: 6px 4px calc(6px + env(safe-area-inset-bottom)); }
+.vas-nav-btn { flex: 1; background: none; border: none; color: #8A8F9C; font-family: inherit; font-size: 11px; font-weight: 600; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 0; cursor: pointer; border-radius: 10px; }
+.vas-nav-btn .ic { font-size: 19px; }
+.vas-nav-btn.active { color: #C9962E; }
+
+.modal-overlay { position: fixed; inset: 0; background: rgba(27,31,42,.55); z-index: 50; display: flex; align-items: flex-end; justify-content: center; }
+.modal { background: #fff; width: 100%; max-width: 560px; max-height: 92vh; border-radius: 18px 18px 0 0; display: flex; flex-direction: column; animation: slideUp .22s ease; }
+@keyframes slideUp { from { transform: translateY(40px); opacity: .5; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .modal { animation: none; } }
+.modal-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; border-bottom: 1px solid #EFEDE6; font-weight: 800; font-size: 16px; }
+.modal-header button { background: none; border: none; font-size: 18px; cursor: pointer; color: #6B7080; padding: 4px 8px; }
+.modal-body { padding: 14px 16px 24px; overflow-y: auto; }
+.modal-body label { display: block; font-size: 12.5px; font-weight: 700; color: #555B69; margin: 12px 0 4px; }
+.modal-body label:first-child { margin-top: 0; }
+.modal-body input, .modal-body select, .modal-body textarea { width: 100%; padding: 10px 12px; border: 1.5px solid #E2DFD5; border-radius: 10px; font-family: inherit; font-size: 14px; background: #FBFAF7; }
+.modal-body input:focus, .modal-body select:focus, .modal-body textarea:focus { outline: 2px solid #C9962E; border-color: #C9962E; }
+.form-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.form-actions { display: flex; gap: 10px; margin-top: 18px; }
+.btn-primary { flex: 1; background: #1B1F2A; color: #fff; border: none; border-radius: 10px; padding: 12px; font-family: inherit; font-weight: 800; font-size: 15px; cursor: pointer; }
+.btn-primary:disabled { opacity: .4; }
+.btn-secondary { flex: 1; background: #EFEDE6; color: #1B1F2A; border: none; border-radius: 10px; padding: 12px; font-family: inherit; font-weight: 700; font-size: 14px; cursor: pointer; }
+.btn-danger { background: #FBEAEA; color: #D64545; border: none; border-radius: 10px; padding: 12px 16px; font-family: inherit; font-weight: 700; font-size: 14px; cursor: pointer; }
+.btn-mini { background: #C9962E; color: #fff; border: none; border-radius: 8px; padding: 5px 12px; font-family: inherit; font-weight: 700; font-size: 12px; cursor: pointer; }
+
+.photo-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.photo-thumb { position: relative; }
+.photo-thumb img { width: 64px; height: 64px; object-fit: cover; border-radius: 10px; border: 1px solid #E2DFD5; }
+.photo-thumb button { position: absolute; top: -6px; inset-inline-end: -6px; background: #D64545; color: #fff; border: none; border-radius: 50%; width: 20px; height: 20px; font-size: 11px; cursor: pointer; }
+.photo-add { width: 64px; height: 64px; border: 2px dashed #C9962E; background: #FBF7EE; border-radius: 10px; font-size: 22px; cursor: pointer; }
+
+.toggle-row { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; margin: 10px 0; cursor: pointer; }
+.toggle-row input { width: auto !important; accent-color: #C9962E; transform: scale(1.2); }
+
+.report-preview { background: #F0EEE7; border-radius: 10px; padding: 12px; margin-top: 10px; font-family: inherit; font-size: 13px; white-space: pre-wrap; word-break: break-word; max-height: 260px; overflow-y: auto; direction: rtl; text-align: right; }
+
+.settings-row { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid #F0EEE7; cursor: pointer; }
+.settings-row:last-child { border-bottom: none; }
+.settings-row.inactive { opacity: .45; }
+.settings-name { font-weight: 700; font-size: 14px; }
+.settings-sub { font-size: 12px; color: #6B7080; }
+.settings-badge { font-size: 11px; background: #EFEDE6; padding: 3px 10px; border-radius: 999px; font-weight: 700; color: #555B69; }
+.team-kind { font-size: 12px; font-weight: 800; color: #C9962E; margin: 10px 0 2px; letter-spacing: .5px; }
+
+.toast { position: fixed; bottom: 140px; inset-inline: 0; margin: 0 auto; width: fit-content; max-width: 90vw; background: #1B1F2A; color: #fff; padding: 10px 22px; border-radius: 999px; font-size: 14px; font-weight: 700; z-index: 60; box-shadow: 0 4px 14px rgba(0,0,0,.3); display: none; }
+
+.photo-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.92); z-index: 70; display: none; align-items: center; justify-content: center; flex-direction: column; gap: 14px; }
+.photo-overlay img { max-width: 94vw; max-height: 80vh; border-radius: 10px; }
+.photo-overlay div { color: #fff; font-weight: 700; cursor: pointer; }
+
+.readonly-banner { background: #C9962E; color: #1B1F2A; text-align: center; font-weight: 800; font-size: 13px; padding: 6px; }
+
+@media (max-width: 400px) {
+  .kpi-value { font-size: 24px; }
+  .proj-bar-name { width: 44%; font-size: 12px; }
+}
+</style>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+</head>
+<body>
+
+<header class="vas-header">
+  <div>
+    <div class="vas-brand">VAS <span>SECURITY</span></div>
+    <div class="vas-sub">ניהול פרויקטים ופאנץ׳ ליסט</div>
+  </div>
+  <div class="vas-side">
+    <div class="vas-date" id="hdrDate"></div>
+    <div class="conn off" id="connStatus">מתחבר…</div>
+  </div>
+</header>
+<div id="roBanner" class="readonly-banner" style="display:none">👁️ מצב צפייה בלבד</div>
+
+<main id="app"><div class="card empty">טוען נתונים…</div></main>
+
+<nav class="vas-nav" id="nav"></nav>
+
+<div class="toast" id="toast"></div>
+<div class="photo-overlay" id="photoOverlay" onclick="closePhoto()">
+  <img id="photoOverlayImg" alt="">
+  <div>✕ סגירה</div>
+</div>
+<div id="modalRoot"></div>
+
+<script>
+/* ==================== Firebase ==================== */
+const firebaseConfig = {
+  apiKey: "AIzaSyD0_Ji35W2rlaqYjYRqAU-sTksZm0CRDaY",
+  authDomain: "vas-schedule.firebaseapp.com",
+  projectId: "vas-schedule",
+  storageBucket: "vas-schedule.firebasestorage.app",
+  messagingSenderId: "763095300879",
+  appId: "1:763095300879:web:7d42c00f856ba8fd365c7a"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const DOC = db.collection('vas').doc('punch');
+const PHOTOS = db.collection('vas');
+
+const READONLY = new URLSearchParams(location.search).get('view') === '1';
+if (READONLY) document.getElementById('roBanner').style.display = 'block';
+
+/* ==================== Constants ==================== */
+const STATUSES = ["פתוח","בטיפול","בוצע","אושר"];
+const STATUS_COLORS = {"פתוח":"#D64545","בטיפול":"#E08A2E","בוצע":"#3B6EA5","אושר":"#3E8E5A"};
+const URGENCIES = ["דחוף","גבוה","רגיל","נמוך"];
+const URGENCY_COLORS = {"דחוף":"#D64545","גבוה":"#E08A2E","רגיל":"#3B6EA5","נמוך":"#8A8F9C"};
+const DISCIPLINES = ["גילוי אש","תקשורת","מצלמות","בקרת כניסה","אינטרקום","פריצה","כריזה","כללי"];
+const CALL_STATUSES = ["חדשה","שובצה","בטיפול","נסגרה"];
+const CALL_STATUS_COLORS = {"חדשה":"#D64545","שובצה":"#E08A2E","בטיפול":"#3B6EA5","נסגרה":"#3E8E5A"};
+
+const SEED = {
+  projects: [
+    { id:"p1", name:"ליליוס ירושלים", client:"ליליוס", type:"אינטרקום ותקשורת", desc:"מגדל מגורים 33 קומות · 219 יח\"ד", active:true },
+    { id:"p2", name:"הקפיטל ירושלים", client:"הקפיטל", type:"גילוי אש", desc:"מגדל מעורב · מגורים, משרדים וחניונים", active:true },
+    { id:"p3", name:"קמפוס יובלים נס ציונה", client:"קמפוס יובלים", type:"תקשורת ותשתית פסיבית", desc:"חוזה ביצוע · דירות + מערכות ביטחון", active:true },
+    { id:"p4", name:"מקס סטוק", client:"מקס סטוק", type:"שירות ואחזקה", desc:"סניפים: אור עקיבא, חולון, נוף הגליל, נתניה, עפולה", active:true },
+    { id:"p5", name:"חירייה", client:"חירייה", type:"שירות", desc:"", active:true },
+    { id:"p6", name:"קרית המודיעין", client:"קרית המודיעין", type:"שירות", desc:"", active:true }
+  ],
+  team: [
+    { id:"t1", name:"אבישי", role:"מנהל", kind:"עובד" },
+    { id:"t2", name:"תרשיש", role:"טכנאי", kind:"עובד" },
+    { id:"t3", name:"ליאל", role:"מנהלת פרויקטים", kind:"עובד" },
+    { id:"t4", name:"איגור", role:"טכנאי", kind:"עובד" },
+    { id:"t5", name:"רפאל", role:"טכנאי", kind:"עובד" },
+    { id:"t6", name:"הילה", role:"מנהלת משרד", kind:"עובד" },
+    { id:"t7", name:"אנדריי", role:"קבלן משנה", kind:"קבלן" },
+    { id:"t8", name:"דביר", role:"קבלן משנה", kind:"קבלן" },
+    { id:"t9", name:"דולב", role:"קבלן משנה", kind:"קבלן" },
+    { id:"t10", name:"בוריס", role:"קבלן משנה", kind:"קבלן" },
+    { id:"t11", name:"עוזי", role:"קבלן משנה", kind:"קבלן" },
+    { id:"t12", name:"מתן", role:"קבלן משנה", kind:"קבלן" }
+  ],
+  tasks: [],
+  calls: []
+};
+
+/* ==================== State ==================== */
+let S = null;
+let tab = 'home';
+let filters = { proj:'all', status:'open', assignee:'all' };
+let callsShowClosed = false;
+let reportProj = '', reportPerson = '';
+const photoCache = {};
+
+const uid = () => Math.random().toString(36).slice(2,9) + Date.now().toString(36).slice(-4);
+const today = () => { const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
+const fmtDate = d => { if(!d) return ''; const [y,m,day]=d.split('-'); return `${day}/${m}/${y}`; };
+const isOverdue = t => t.due && t.due < today() && t.status!=='בוצע' && t.status!=='אושר';
+const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const projName = id => { const p=(S.projects||[]).find(x=>x.id===id); return p?p.name:'—'; };
+
+document.getElementById('hdrDate').textContent = fmtDate(today());
+
+/* ==================== Firestore sync ==================== */
+const connEl = document.getElementById('connStatus');
+function setConn(on){ connEl.textContent = on ? '● מסונכרן' : '● לא מחובר'; connEl.className = 'conn ' + (on?'on':'off'); }
+
+DOC.onSnapshot(snap => {
+  setConn(true);
+  if (!snap.exists) {
+    S = JSON.parse(JSON.stringify(SEED));
+    if (!READONLY) DOC.set(S).catch(()=>{});
+  } else {
+    S = snap.data();
+    S.projects = S.projects || []; S.team = S.team || [];
+    S.tasks = S.tasks || []; S.calls = S.calls || [];
+  }
+  if (!reportProj) { const p = S.projects.find(x=>x.active); reportProj = p?p.id:''; }
+  render();
+}, err => { console.error(err); setConn(false);
+  document.getElementById('app').innerHTML = '<div class="card empty">אין חיבור למסד הנתונים.<br>בדקו חיבור אינטרנט או הרשאות Firestore (חוקי vas/punch).</div>';
+});
+
+function persist(){
+  if (READONLY) { toastMsg('מצב צפייה — אין אפשרות לערוך'); return Promise.resolve(); }
+  return DOC.set(S).catch(e => { console.error(e); setConn(false); toastMsg('שגיאה בשמירה — בדקו חיבור'); });
+}
+
+/* ---------- photos in Firestore ---------- */
+async function loadPhotoDoc(id){
+  if (photoCache[id]) return photoCache[id];
+  try {
+    const snap = await PHOTOS.doc(id).get();
+    if (snap.exists) { photoCache[id] = snap.data().data; return photoCache[id]; }
+  } catch(e){ console.error(e); }
+  return null;
+}
+function hydratePhotos(){
+  document.querySelectorAll('img[data-photoid]').forEach(async img => {
+    const data = await loadPhotoDoc(img.dataset.photoid);
+    if (data) img.src = data;
+  });
+}
+async function savePhotoDoc(id, data){ await PHOTOS.doc(id).set({ data }); photoCache[id] = data; }
+async function deletePhotoDocs(ids){ for (const id of (ids||[])) { try { await PHOTOS.doc(id).delete(); } catch(e){} delete photoCache[id]; } }
+
+/* ==================== UI helpers ==================== */
+let toastTimer;
+function toastMsg(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.style.display = 'block';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=> t.style.display='none', 2200);
+}
+function openPhoto(id){
+  const ov = document.getElementById('photoOverlay');
+  const img = document.getElementById('photoOverlayImg');
+  img.src = photoCache[id] || '';
+  ov.style.display = 'flex';
+  if (!photoCache[id]) loadPhotoDoc(id).then(d => { if(d) img.src = d; });
+}
+function closePhoto(){ document.getElementById('photoOverlay').style.display = 'none'; }
+function closeModal(){ document.getElementById('modalRoot').innerHTML = ''; }
+function modalShell(title, bodyHtml){
+  document.getElementById('modalRoot').innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+      <div class="modal">
+        <div class="modal-header"><div>${esc(title)}</div><button onclick="closeModal()">✕</button></div>
+        <div class="modal-body">${bodyHtml}</div>
+      </div>
+    </div>`;
+}
+function copyText(text){
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.position='fixed'; ta.style.opacity='0';
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); } catch(e){}
+  document.body.removeChild(ta);
+}
+function compressImage(file, maxDim=900, quality=0.72){
+  return new Promise((resolve,reject)=>{
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        let {width,height} = img;
+        if (width>maxDim || height>maxDim){
+          const s = maxDim/Math.max(width,height);
+          width=Math.round(width*s); height=Math.round(height*s);
+        }
+        const c = document.createElement('canvas');
+        c.width=width; c.height=height;
+        c.getContext('2d').drawImage(img,0,0,width,height);
+        resolve(c.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+/* ==================== Nav ==================== */
+const NAV = [['home','🏠','ראשי'],['tasks','📋','משימות'],['calls','🛠️','קריאות'],['reports','📤','דוחות'],['settings','⚙️','ניהול']];
+function renderNav(){
+  document.getElementById('nav').innerHTML = NAV.map(([k,ic,label]) =>
+    `<button class="vas-nav-btn${tab===k?' active':''}" onclick="goTab('${k}')"><span class="ic">${ic}</span><span>${label}</span></button>`
+  ).join('');
+}
+function goTab(k){ tab = k; render(); window.scrollTo(0,0); }
+
+/* ==================== Render ==================== */
+function render(){
+  if (!S) return;
+  renderNav();
+  const app = document.getElementById('app');
+  if (tab==='home') app.innerHTML = renderHome();
+  else if (tab==='tasks') app.innerHTML = renderTasks();
+  else if (tab==='calls') app.innerHTML = renderCalls();
+  else if (tab==='reports') app.innerHTML = renderReports();
+  else app.innerHTML = renderSettings();
+  hydratePhotos();
+}
+
+/* ---------- Home ---------- */
+function renderHome(){
+  const open = S.tasks.filter(t=>t.status==='פתוח'||t.status==='בטיפול');
+  const urgent = open.filter(t=>t.urgency==='דחוף');
+  const overdue = S.tasks.filter(isOverdue);
+  const waiting = S.tasks.filter(t=>t.status==='בוצע');
+  const openCalls = S.calls.filter(c=>c.status!=='נסגרה');
+
+  const byProj = S.projects.filter(p=>p.active).map(p=>({
+    name:p.name,
+    open: S.tasks.filter(t=>t.projectId===p.id && (t.status==='פתוח'||t.status==='בטיפול')).length,
+    total: S.tasks.filter(t=>t.projectId===p.id).length
+  })).filter(x=>x.total>0);
+  const maxOpen = Math.max(1, ...byProj.map(x=>x.open));
+
+  return `
+    <div class="kpi-grid">
+      ${kpi('משימות פתוחות', open.length, '#D64545')}
+      ${kpi('דחופות', urgent.length, '#E08A2E')}
+      ${kpi('באיחור', overdue.length, '#8E44AD')}
+      ${kpi('ממתינות לאישור', waiting.length, '#3B6EA5')}
+    </div>
+    <div class="card">
+      <div class="card-title">פתוחות לפי פרויקט</div>
+      ${byProj.length===0 ? '<div class="empty">אין משימות עדיין — התחילו בלשונית משימות</div>' :
+        byProj.map(p=>`
+          <div class="proj-bar-row">
+            <div class="proj-bar-name">${esc(p.name)}</div>
+            <div class="proj-bar-track"><div class="proj-bar-fill" style="width:${(p.open/maxOpen)*100}%"></div></div>
+            <div class="proj-bar-num">${p.open}</div>
+          </div>`).join('')}
+    </div>
+    ${urgent.length ? `
+      <div class="card">
+        <div class="card-title urgent-title">🔥 דחוף עכשיו</div>
+        ${urgent.slice(0,5).map(t=>`
+          <div class="mini-task" onclick="goTab('tasks')">
+            <span class="dot" style="background:${URGENCY_COLORS[t.urgency]}"></span>
+            <div><div class="mini-task-title">${esc(t.title)}</div>
+            <div class="mini-task-sub">${esc(projName(t.projectId))} · ${esc(t.assignee||'לא שובץ')}</div></div>
+          </div>`).join('')}
+      </div>` : ''}
+    <div class="card">
+      <div class="card-title">קריאות שירות פתוחות</div>
+      ${openCalls.length===0 ? '<div class="empty">אין קריאות פתוחות 👌</div>' :
+        openCalls.slice(0,5).map(c=>`
+          <div class="mini-task" onclick="goTab('calls')">
+            <span class="dot" style="background:${CALL_STATUS_COLORS[c.status]}"></span>
+            <div><div class="mini-task-title">${esc(c.customer)} — ${esc(c.desc)}</div>
+            <div class="mini-task-sub">${esc(c.status)} · ${esc(c.technician||'לא שובץ')}</div></div>
+          </div>`).join('')}
+    </div>`;
+}
+const kpi = (label,value,color)=>`<div class="kpi" style="border-inline-start-color:${color}"><div class="kpi-value" style="color:${color}">${value}</div><div class="kpi-label">${label}</div></div>`;
+
+/* ---------- Tasks ---------- */
+function setFilter(k,v){ filters[k]=v; render(); }
+function filteredTasks(){
+  return S.tasks.filter(t=>{
+    if (filters.proj!=='all' && t.projectId!==filters.proj) return false;
+    if (filters.status==='open' && t.status==='אושר') return false;
+    if (filters.status!=='all' && filters.status!=='open' && t.status!==filters.status) return false;
+    if (filters.assignee!=='all' && t.assignee!==filters.assignee) return false;
+    return true;
+  }).sort((a,b)=>URGENCIES.indexOf(a.urgency)-URGENCIES.indexOf(b.urgency));
+}
+function renderTasks(){
+  const list = filteredTasks();
+  return `
+    <div class="filter-row">
+      <select onchange="setFilter('proj',this.value)">
+        <option value="all"${filters.proj==='all'?' selected':''}>כל הפרויקטים</option>
+        ${S.projects.filter(p=>p.active).map(p=>`<option value="${p.id}"${filters.proj===p.id?' selected':''}>${esc(p.name)}</option>`).join('')}
+      </select>
+      <select onchange="setFilter('status',this.value)">
+        <option value="open"${filters.status==='open'?' selected':''}>פעילות (ללא מאושרות)</option>
+        <option value="all"${filters.status==='all'?' selected':''}>הכל</option>
+        ${STATUSES.map(s=>`<option value="${s}"${filters.status===s?' selected':''}>${s}</option>`).join('')}
+      </select>
+      <select onchange="setFilter('assignee',this.value)">
+        <option value="all"${filters.assignee==='all'?' selected':''}>כל הצוות</option>
+        ${S.team.map(m=>`<option value="${esc(m.name)}"${filters.assignee===m.name?' selected':''}>${esc(m.name)}</option>`).join('')}
+      </select>
+    </div>
+    ${list.length===0 ? '<div class="card empty">אין משימות בסינון הנוכחי</div>' : list.map(taskCard).join('')}
+    ${READONLY?'':'<button class="fab" onclick="openTaskForm()">＋ משימה חדשה</button>'}`;
+}
+function taskCard(t){
+  return `
+    <div class="task-card" style="border-inline-start-color:${URGENCY_COLORS[t.urgency]||'#8A8F9C'}">
+      <div class="task-top">
+        <div class="task-title" onclick="openTaskForm('${t.id}')">${esc(t.title)}</div>
+        <button class="status-chip" style="background:${STATUS_COLORS[t.status]}" onclick="cycleTaskStatus('${t.id}')">${esc(t.status)}</button>
+      </div>
+      <div class="task-meta" onclick="openTaskForm('${t.id}')">
+        <span>📁 ${esc(projName(t.projectId))}</span>
+        ${t.location?`<span>📍 ${esc(t.location)}</span>`:''}
+        <span>🔧 ${esc(t.discipline)}</span>
+        ${t.assignee?`<span>👷 ${esc(t.assignee)}</span>`:''}
+        ${t.due?`<span class="${isOverdue(t)?'overdue':''}">📅 ${fmtDate(t.due)}${isOverdue(t)?' ⚠️':''}</span>`:''}
+      </div>
+      ${t.notes?`<div class="task-notes">📝 ${esc(t.notes)}</div>`:''}
+      ${(t.photoIds&&t.photoIds.length)?`<div class="task-photos">${t.photoIds.map(id=>`<img data-photoid="${id}" onclick="openPhoto('${id}')" alt="">`).join('')}</div>`:''}
+    </div>`;
+}
+function cycleTaskStatus(id){
+  if (READONLY) { toastMsg('מצב צפייה — אין אפשרות לערוך'); return; }
+  const t = S.tasks.find(x=>x.id===id); if(!t) return;
+  t.status = STATUSES[(STATUSES.indexOf(t.status)+1)%STATUSES.length];
+  persist(); render(); toastMsg('סטטוס עודכן: '+t.status);
+}
+
+/* ---------- Task form ---------- */
+let pendingPhotos = []; // {id?, data} — data present for new, id for existing
+function openTaskForm(id){
+  if (READONLY) { toastMsg('מצב צפייה — אין אפשרות לערוך'); return; }
+  const t = id ? S.tasks.find(x=>x.id===id) : null;
+  pendingPhotos = t ? (t.photoIds||[]).map(pid=>({id:pid})) : [];
+  const f = t || { projectId:(S.projects.find(p=>p.active)||{}).id||'', title:'', location:'', discipline:'כללי', assignee:'', urgency:'רגיל', status:'פתוח', due:'', notes:'' };
+  modalShell(t?'עריכת משימה':'משימה חדשה', `
+    <label>פרויקט</label>
+    <select id="tf_proj">${S.projects.filter(p=>p.active).map(p=>`<option value="${p.id}"${f.projectId===p.id?' selected':''}>${esc(p.name)}</option>`).join('')}</select>
+    <label>תיאור המשימה / הליקוי *</label>
+    <input id="tf_title" value="${esc(f.title)}" placeholder="לדוגמה: השחלת CAT-6A גרעין א׳ קומות 5–8">
+    <label>מיקום (קומה / גרעין / אזור)</label>
+    <input id="tf_loc" value="${esc(f.location)}" placeholder="קומה 12 · גרעין ב׳">
+    <div class="form-2col">
+      <div><label>דיסציפלינה</label>
+        <select id="tf_disc">${DISCIPLINES.map(d=>`<option${f.discipline===d?' selected':''}>${d}</option>`).join('')}</select></div>
+      <div><label>אחראי ביצוע</label>
+        <select id="tf_assignee"><option value="">— לא שובץ —</option>${S.team.map(m=>`<option value="${esc(m.name)}"${f.assignee===m.name?' selected':''}>${esc(m.name)} (${m.kind})</option>`).join('')}</select></div>
+    </div>
+    <div class="form-2col">
+      <div><label>דחיפות</label>
+        <select id="tf_urg">${URGENCIES.map(u=>`<option${f.urgency===u?' selected':''}>${u}</option>`).join('')}</select></div>
+      <div><label>סטטוס</label>
+        <select id="tf_status">${STATUSES.map(s=>`<option${f.status===s?' selected':''}>${s}</option>`).join('')}</select></div>
+    </div>
+    <label>תאריך יעד</label>
+    <input id="tf_due" type="date" value="${esc(f.due)}">
+    <label>הערות</label>
+    <textarea id="tf_notes" rows="2" placeholder="פרטים נוספים, חומרים, תיאום…">${esc(f.notes)}</textarea>
+    <label>תמונות (עד 4)</label>
+    <div class="photo-row" id="tf_photos"></div>
+    <input id="tf_file" type="file" accept="image/*" style="display:none">
+    <div class="form-actions">
+      ${t?`<button class="btn-danger" onclick="deleteTask('${t.id}')">מחיקה</button>`:''}
+      <button class="btn-primary" onclick="saveTask('${t?t.id:''}')">שמירה</button>
+    </div>`);
+  renderFormPhotos();
+  document.getElementById('tf_file').onchange = async e => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    if (pendingPhotos.length>=4){ toastMsg('עד 4 תמונות למשימה'); return; }
+    try {
+      const data = await compressImage(file);
+      pendingPhotos.push({ data });
+      renderFormPhotos();
+    } catch(err){ toastMsg('שגיאה בטעינת התמונה'); }
+    e.target.value = '';
+  };
+}
+function renderFormPhotos(){
+  const el = document.getElementById('tf_photos'); if(!el) return;
+  el.innerHTML = pendingPhotos.map((p,i)=>`
+    <div class="photo-thumb">
+      <img ${p.data?`src="${p.data}"`:`data-photoid="${p.id}"`} alt="">
+      <button onclick="pendingPhotos.splice(${i},1);renderFormPhotos()">✕</button>
+    </div>`).join('') + `<button class="photo-add" onclick="document.getElementById('tf_file').click()">📷</button>`;
+  hydratePhotos();
+}
+async function saveTask(id){
+  const title = document.getElementById('tf_title').value.trim();
+  if (!title){ toastMsg('חסר תיאור למשימה'); return; }
+  const t = id ? S.tasks.find(x=>x.id===id) : { id: uid(), created: today() };
+  const oldIds = id ? (t.photoIds||[]).slice() : [];
+
+  t.projectId = document.getElementById('tf_proj').value;
+  t.title = title;
+  t.location = document.getElementById('tf_loc').value.trim();
+  t.discipline = document.getElementById('tf_disc').value;
+  t.assignee = document.getElementById('tf_assignee').value;
+  t.urgency = document.getElementById('tf_urg').value;
+  t.status = document.getElementById('tf_status').value;
+  t.due = document.getElementById('tf_due').value;
+  t.notes = document.getElementById('tf_notes').value.trim();
+
+  toastMsg('שומר…');
+  const ids = [];
+  for (const p of pendingPhotos){
+    if (p.id) ids.push(p.id);
+    else { const pid = 'ph_' + uid(); await savePhotoDoc(pid, p.data); ids.push(pid); }
+  }
+  t.photoIds = ids;
+  const removed = oldIds.filter(x=>!ids.includes(x));
+  if (removed.length) deletePhotoDocs(removed);
+
+  if (!id) S.tasks.unshift(t);
+  await persist();
+  closeModal(); render(); toastMsg('המשימה נשמרה ✓');
+}
+async function deleteTask(id){
+  if (!confirm('למחוק את המשימה?')) return;
+  const t = S.tasks.find(x=>x.id===id);
+  if (t && t.photoIds) deletePhotoDocs(t.photoIds);
+  S.tasks = S.tasks.filter(x=>x.id!==id);
+  await persist();
+  closeModal(); render(); toastMsg('המשימה נמחקה');
+}
+
+/* ---------- Service calls ---------- */
+function renderCalls(){
+  const list = S.calls.filter(c=>callsShowClosed || c.status!=='נסגרה');
+  return `
+    <label class="toggle-row"><input type="checkbox" ${callsShowClosed?'checked':''} onchange="callsShowClosed=this.checked;render()"> הצג גם קריאות סגורות</label>
+    ${list.length===0 ? '<div class="card empty">אין קריאות שירות</div>' : list.map(c=>`
+      <div class="task-card" style="border-inline-start-color:${URGENCY_COLORS[c.urgency]||'#8A8F9C'}">
+        <div class="task-top">
+          <div class="task-title" onclick="openCallForm('${c.id}')">${esc(c.customer)}</div>
+          <button class="status-chip" style="background:${CALL_STATUS_COLORS[c.status]}" onclick="cycleCallStatus('${c.id}')">${esc(c.status)}</button>
+        </div>
+        <div class="task-meta" onclick="openCallForm('${c.id}')">
+          <span>🛠️ ${esc(c.desc)}</span>
+          ${c.technician?`<span>👷 ${esc(c.technician)}</span>`:''}
+          <span>⚡ ${esc(c.urgency)}</span>
+          <span>📅 ${fmtDate(c.created)}</span>
+        </div>
+        ${c.phone?`<div class="task-meta"><a href="tel:${esc(c.phone)}">📞 ${esc(c.phone)}</a></div>`:''}
+        ${c.notes?`<div class="task-notes">📝 ${esc(c.notes)}</div>`:''}
+      </div>`).join('')}
+    ${READONLY?'':'<button class="fab" onclick="openCallForm()">＋ קריאה חדשה</button>'}`;
+}
+function cycleCallStatus(id){
+  if (READONLY) { toastMsg('מצב צפייה — אין אפשרות לערוך'); return; }
+  const c = S.calls.find(x=>x.id===id); if(!c) return;
+  c.status = CALL_STATUSES[(CALL_STATUSES.indexOf(c.status)+1)%CALL_STATUSES.length];
+  persist(); render(); toastMsg('סטטוס: '+c.status);
+}
+function openCallForm(id){
+  if (READONLY) { toastMsg('מצב צפייה — אין אפשרות לערוך'); return; }
+  const c = id ? S.calls.find(x=>x.id===id) : null;
+  const f = c || { customer:'', desc:'', phone:'', technician:'', urgency:'רגיל', status:'חדשה', notes:'' };
+  modalShell(c?'עריכת קריאה':'קריאת שירות חדשה', `
+    <label>לקוח / אתר *</label>
+    <input id="cf_customer" value="${esc(f.customer)}" placeholder="מקס סטוק חולון">
+    <label>תיאור התקלה *</label>
+    <input id="cf_desc" value="${esc(f.desc)}" placeholder="מצלמה 4 לא מקליטה">
+    <label>טלפון איש קשר</label>
+    <input id="cf_phone" value="${esc(f.phone)}" inputmode="tel">
+    <div class="form-2col">
+      <div><label>טכנאי</label>
+        <select id="cf_tech"><option value="">— לא שובץ —</option>${S.team.map(m=>`<option value="${esc(m.name)}"${f.technician===m.name?' selected':''}>${esc(m.name)}</option>`).join('')}</select></div>
+      <div><label>דחיפות</label>
+        <select id="cf_urg">${URGENCIES.map(u=>`<option${f.urgency===u?' selected':''}>${u}</option>`).join('')}</select></div>
+    </div>
+    <label>סטטוס</label>
+    <select id="cf_status">${CALL_STATUSES.map(s=>`<option${f.status===s?' selected':''}>${s}</option>`).join('')}</select>
+    <label>הערות</label>
+    <textarea id="cf_notes" rows="2">${esc(f.notes)}</textarea>
+    <div class="form-actions">
+      ${c?`<button class="btn-danger" onclick="deleteCall('${c.id}')">מחיקה</button>`:''}
+      <button class="btn-primary" onclick="saveCall('${c?c.id:''}')">שמירה</button>
+    </div>`);
+}
+async function saveCall(id){
+  const customer = document.getElementById('cf_customer').value.trim();
+  const desc = document.getElementById('cf_desc').value.trim();
+  if (!customer || !desc){ toastMsg('חסרים לקוח או תיאור'); return; }
+  const c = id ? S.calls.find(x=>x.id===id) : { id: uid(), created: today() };
+  c.customer = customer; c.desc = desc;
+  c.phone = document.getElementById('cf_phone').value.trim();
+  c.technician = document.getElementById('cf_tech').value;
+  c.urgency = document.getElementById('cf_urg').value;
+  c.status = document.getElementById('cf_status').value;
+  c.notes = document.getElementById('cf_notes').value.trim();
+  if (!id) S.calls.unshift(c);
+  await persist();
+  closeModal(); render(); toastMsg('הקריאה נשמרה ✓');
+}
+async function deleteCall(id){
+  if (!confirm('למחוק את הקריאה?')) return;
+  S.calls = S.calls.filter(x=>x.id!==id);
+  await persist();
+  closeModal(); render(); toastMsg('הקריאה נמחקה');
+}
+
+/* ---------- Reports ---------- */
+function buildProjReport(projId){
+  const p = S.projects.find(x=>x.id===projId);
+  const items = S.tasks.filter(t=>t.projectId===projId && t.status!=='אושר');
+  let msg = `*דוח מצב — ${p?p.name:''}*\n📅 ${fmtDate(today())}\n`;
+  if (items.length===0) msg += '\n✅ אין משימות פתוחות';
+  else {
+    const byLoc = {};
+    items.forEach(t=>{ const k=t.location||'כללי'; (byLoc[k]=byLoc[k]||[]).push(t); });
+    Object.entries(byLoc).forEach(([loc,arr])=>{
+      msg += `\n📍 *${loc}*\n`;
+      arr.forEach(t=>{
+        const flag = t.urgency==='דחוף'?'🔴':t.urgency==='גבוה'?'🟠':'🔹';
+        msg += `${flag} ${t.title} — ${t.status}${t.assignee?` (${t.assignee})`:''}\n`;
+      });
+    });
+    msg += `\nסה"כ: ${items.length} משימות פתוחות`;
+  }
+  msg += '\n\n_VAS Security — ש.ו טכנולוגיות ביטחון_';
+  return msg;
+}
+function buildPersonReport(person){
+  const items = S.tasks.filter(t=>t.assignee===person && (t.status==='פתוח'||t.status==='בטיפול'));
+  const callItems = S.calls.filter(c=>c.technician===person && c.status!=='נסגרה');
+  let msg = `*תוכנית עבודה — ${person}*\n📅 ${fmtDate(today())}\n`;
+  if (items.length===0 && callItems.length===0) msg += '\nאין משימות פתוחות ✅';
+  items.forEach(t=>{
+    const flag = t.urgency==='דחוף'?'🔴':t.urgency==='גבוה'?'🟠':'🔹';
+    msg += `\n${flag} *${projName(t.projectId)}* — ${t.title}`;
+    if (t.location) msg += ` (${t.location})`;
+    if (t.due) msg += ` · יעד ${fmtDate(t.due)}`;
+  });
+  callItems.forEach(c=>{ msg += `\n🛠️ קריאת שירות: ${c.customer} — ${c.desc}`; });
+  msg += '\n\nבהצלחה! 💪';
+  return msg;
+}
+function renderReports(){
+  const projRep = reportProj ? buildProjReport(reportProj) : '';
+  const persRep = reportPerson ? buildPersonReport(reportPerson) : '';
+  return `
+    <div class="card">
+      <div class="card-title">📁 דוח מצב לפרויקט</div>
+      <select onchange="reportProj=this.value;render()">
+        ${S.projects.filter(p=>p.active).map(p=>`<option value="${p.id}"${reportProj===p.id?' selected':''}>${esc(p.name)}</option>`).join('')}
+      </select>
+      <pre class="report-preview">${esc(projRep)}</pre>
+      <div class="form-actions">
+        <button class="btn-secondary" onclick="copyReport('proj')">📋 העתקה</button>
+        <button class="btn-primary" onclick="waReport('proj')">💬 שליחה בוואטסאפ</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">👷 תוכנית עבודה לאיש צוות</div>
+      <select onchange="reportPerson=this.value;render()">
+        <option value="">בחרו איש צוות…</option>
+        ${S.team.map(m=>`<option value="${esc(m.name)}"${reportPerson===m.name?' selected':''}>${esc(m.name)}</option>`).join('')}
+      </select>
+      ${reportPerson?`
+        <pre class="report-preview">${esc(persRep)}</pre>
+        <div class="form-actions">
+          <button class="btn-secondary" onclick="copyReport('person')">📋 העתקה</button>
+          <button class="btn-primary" onclick="waReport('person')">💬 שליחה בוואטסאפ</button>
+        </div>`:''}
+    </div>`;
+}
+function copyReport(kind){
+  const text = kind==='proj' ? buildProjReport(reportProj) : buildPersonReport(reportPerson);
+  copyText(text); toastMsg('הועתק — אפשר להדביק בוואטסאפ');
+}
+function waReport(kind){
+  const text = kind==='proj' ? buildProjReport(reportProj) : buildPersonReport(reportPerson);
+  window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
+}
+
+/* ---------- Settings ---------- */
+function renderSettings(){
+  return `
+    <div class="card">
+      <div class="card-title">פרויקטים ${READONLY?'':'<button class="btn-mini" onclick="openProjForm()">＋ הוספה</button>'}</div>
+      ${S.projects.map(p=>`
+        <div class="settings-row${p.active?'':' inactive'}" onclick="openProjForm('${p.id}')">
+          <div><div class="settings-name">${esc(p.name)}</div>
+          <div class="settings-sub">${esc(p.type)}${p.desc?' · '+esc(p.desc):''}</div></div>
+          <span class="settings-badge">${p.active?'פעיל':'מושהה'}</span>
+        </div>`).join('')}
+    </div>
+    <div class="card">
+      <div class="card-title">צוות ${READONLY?'':'<button class="btn-mini" onclick="openMemberForm()">＋ הוספה</button>'}</div>
+      ${['עובד','קבלן'].map(kind=>`
+        <div class="team-kind">${kind==='עובד'?'עובדים':'קבלני משנה'}</div>
+        ${S.team.filter(m=>m.kind===kind).map(m=>`
+          <div class="settings-row" onclick="openMemberForm('${m.id}')">
+            <div><div class="settings-name">${esc(m.name)}</div>
+            <div class="settings-sub">${esc(m.role)}</div></div>
+          </div>`).join('')}`).join('')}
+    </div>
+    <div class="card">
+      <div class="card-title">גיבוי ושחזור</div>
+      <div class="form-actions" style="margin-top:4px">
+        <button class="btn-secondary" onclick="exportBackup()">⬇️ ייצוא גיבוי</button>
+        ${READONLY?'':'<button class="btn-secondary" onclick="document.getElementById(\'importFile\').click()">⬆️ שחזור מגיבוי</button>'}
+      </div>
+      <input id="importFile" type="file" accept=".json" style="display:none" onchange="importBackup(event)">
+      <div class="settings-sub" style="margin-top:8px">הגיבוי כולל פרויקטים, צוות, משימות וקריאות (ללא תמונות). מומלץ לייצא פעם בחודש.</div>
+    </div>
+    <div class="card">
+      <div class="card-title">קישור צפייה בלבד</div>
+      <div class="settings-sub">שיתוף עם לקוח או מפקח — רואים הכל, לא עורכים כלום:</div>
+      <div class="form-actions" style="margin-top:10px">
+        <button class="btn-secondary" onclick="copyViewLink()">📋 העתקת קישור צפייה</button>
+      </div>
+    </div>`;
+}
+function openProjForm(id){
+  if (READONLY) { toastMsg('מצב צפייה — אין אפשרות לערוך'); return; }
+  const p = id ? S.projects.find(x=>x.id===id) : null;
+  const f = p || { name:'', client:'', type:'', desc:'', active:true };
+  modalShell(p?'עריכת פרויקט':'פרויקט חדש', `
+    <label>שם הפרויקט *</label><input id="pf_name" value="${esc(f.name)}">
+    <label>לקוח / מזמין</label><input id="pf_client" value="${esc(f.client)}">
+    <label>סוג עבודה</label><input id="pf_type" value="${esc(f.type)}" placeholder="גילוי אש / תקשורת / שירות…">
+    <label>תיאור</label><input id="pf_desc" value="${esc(f.desc)}">
+    <label class="toggle-row"><input id="pf_active" type="checkbox" ${f.active?'checked':''}> פרויקט פעיל</label>
+    <div class="form-actions">
+      ${p?`<button class="btn-danger" onclick="deleteProj('${p.id}')">מחיקה</button>`:''}
+      <button class="btn-primary" onclick="saveProj('${p?p.id:''}')">שמירה</button>
+    </div>`);
+}
+async function saveProj(id){
+  const name = document.getElementById('pf_name').value.trim();
+  if (!name){ toastMsg('חסר שם פרויקט'); return; }
+  const p = id ? S.projects.find(x=>x.id===id) : { id: uid() };
+  p.name = name;
+  p.client = document.getElementById('pf_client').value.trim();
+  p.type = document.getElementById('pf_type').value.trim();
+  p.desc = document.getElementById('pf_desc').value.trim();
+  p.active = document.getElementById('pf_active').checked;
+  if (!id) S.projects.push(p);
+  await persist(); closeModal(); render(); toastMsg('הפרויקט נשמר ✓');
+}
+async function deleteProj(id){
+  const count = S.tasks.filter(t=>t.projectId===id).length;
+  if (!confirm(count ? `לפרויקט יש ${count} משימות שיימחקו יחד איתו. למחוק?` : 'למחוק את הפרויקט?')) return;
+  S.tasks.filter(t=>t.projectId===id).forEach(t=>{ if(t.photoIds) deletePhotoDocs(t.photoIds); });
+  S.tasks = S.tasks.filter(t=>t.projectId!==id);
+  S.projects = S.projects.filter(x=>x.id!==id);
+  await persist(); closeModal(); render(); toastMsg('הפרויקט נמחק');
+}
+function openMemberForm(id){
+  if (READONLY) { toastMsg('מצב צפייה — אין אפשרות לערוך'); return; }
+  const m = id ? S.team.find(x=>x.id===id) : null;
+  const f = m || { name:'', role:'טכנאי', kind:'עובד' };
+  modalShell(m?'עריכת איש צוות':'איש צוות חדש', `
+    <label>שם *</label><input id="mf_name" value="${esc(f.name)}">
+    <label>תפקיד</label><input id="mf_role" value="${esc(f.role)}">
+    <label>סוג</label>
+    <select id="mf_kind"><option value="עובד"${f.kind==='עובד'?' selected':''}>עובד</option><option value="קבלן"${f.kind==='קבלן'?' selected':''}>קבלן משנה</option></select>
+    <div class="form-actions">
+      ${m?`<button class="btn-danger" onclick="deleteMember('${m.id}')">מחיקה</button>`:''}
+      <button class="btn-primary" onclick="saveMember('${m?m.id:''}')">שמירה</button>
+    </div>`);
+}
+async function saveMember(id){
+  const name = document.getElementById('mf_name').value.trim();
+  if (!name){ toastMsg('חסר שם'); return; }
+  const m = id ? S.team.find(x=>x.id===id) : { id: uid() };
+  m.name = name;
+  m.role = document.getElementById('mf_role').value.trim();
+  m.kind = document.getElementById('mf_kind').value;
+  if (!id) S.team.push(m);
+  await persist(); closeModal(); render(); toastMsg('איש הצוות נשמר ✓');
+}
+async function deleteMember(id){
+  if (!confirm('למחוק את איש הצוות?')) return;
+  S.team = S.team.filter(x=>x.id!==id);
+  await persist(); closeModal(); render(); toastMsg('איש הצוות נמחק');
+}
+
+/* ---------- Backup ---------- */
+function exportBackup(){
+  const data = { projects:S.projects, team:S.team, tasks:S.tasks.map(t=>({...t})), calls:S.calls, exported: new Date().toISOString() };
+  const blob = new Blob([JSON.stringify(data,null,2)], { type:'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'vas-punch-backup-' + today() + '.json';
+  a.click();
+  toastMsg('הגיבוי הורד ✓');
+}
+function importBackup(e){
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async ev => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      if (!data.projects || !data.team) throw new Error('bad file');
+      if (!confirm('השחזור ידרוס את הנתונים הנוכחיים. להמשיך?')) return;
+      S.projects = data.projects; S.team = data.team;
+      S.tasks = data.tasks || []; S.calls = data.calls || [];
+      await persist(); render(); toastMsg('הגיבוי שוחזר ✓');
+    } catch(err){ toastMsg('קובץ גיבוי לא תקין'); }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+function copyViewLink(){
+  const url = location.origin + location.pathname + '?view=1';
+  copyText(url); toastMsg('קישור הצפייה הועתק');
+}
+</script>
+</body>
+</html>
