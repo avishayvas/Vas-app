@@ -538,6 +538,7 @@ function taskCard(t){
         ${t.closedBy?`<span>🔒 ${esc(t.closedBy)}</span>`:''}
       </div>
       ${t.notes?`<div class="task-notes">📝 ${esc(t.notes)}</div>`:''}
+      ${t.doneDesc?`<div class="task-notes" style="background:#EEF3F9;color:#2B5580;font-weight:600">🔧 בוצע: ${esc(t.doneDesc)}${t.doneQty?`<br>📦 כמויות: ${esc(t.doneQty)}`:''}${t.doneBy?`<br><span style="font-weight:500;font-size:12px">דווח ע"י ${esc(t.doneBy)} · ${fmtDate(t.doneAt||'')}</span>`:''}</div>`:''}
       ${t.upsell?`<div class="task-notes" style="background:#EFF7F0;color:#2C6E48;font-weight:600">💰 ${esc(t.upsellType||'מכירה נוספת')}: ${esc(t.upsell)}${t.upsellAmt?` — ${esc(t.upsellAmt)} ₪`:''}${t.updatedBy?` (${esc(t.updatedBy)})`:''}${t.upsellPaid?' · תוגמל ✓':''}</div>`:''}
       ${mediaStrip(taskMedia(t))}
       ${claimBlock('task', t)}
@@ -584,6 +585,9 @@ function openTaskForm(id){
     <input id="tf_due" type="date" value="${esc(f.due)}">
     <label>הערות</label>
     <textarea id="tf_notes" rows="2" placeholder="פרטים נוספים, חומרים, תיאום…">${esc(f.notes)}</textarea>
+    <label style="color:#3B6EA5">🔧 דיווח ביצוע — מה בוצע בפועל</label>
+    <textarea id="tf_done" rows="2" placeholder="לדוגמה: הותקנו נקודות תקשורת בקומה 5, בוצעו בדיקות Fluke">${esc(f.doneDesc||'')}</textarea>
+    <input id="tf_doneqty" value="${esc(f.doneQty||'')}" placeholder="כמויות: 12 נק׳ · 3 גלאים · 40 מ׳ כבל" style="margin-top:8px">
     <label style="color:#3E8E5A">💰 מכירה נוספת / ליד (לתיעוד לצורך תגמול)</label>
     <input id="tf_upsell" value="${esc(f.upsell||'')}" placeholder="מה נמכר או זוהה? לדוגמה: מפצל HDMI / הרחבת מצלמות">
     <div class="form-2col" style="margin-top:8px">
@@ -634,6 +638,10 @@ async function saveTask(id){
   t.upsell = (document.getElementById('tf_upsell')||{value:''}).value.trim();
   t.upsellAmt = (document.getElementById('tf_upsellamt')||{value:''}).value.trim().replace(/[^0-9.]/g,'');
   t.upsellType = (document.getElementById('tf_upstype')||{value:''}).value;
+  const prevDoneT = t.doneDesc || '';
+  t.doneDesc = (document.getElementById('tf_done')||{value:''}).value.trim();
+  t.doneQty = (document.getElementById('tf_doneqty')||{value:''}).value.trim();
+  if (t.doneDesc && t.doneDesc !== prevDoneT){ t.doneBy = USER; t.doneAt = today(); pushLog('דיווח ביצוע במשימה: ' + t.title); }
   if (t.upsell && t.upsell !== prevUpsT) pushLog('💰 מכירה נוספת (' + (t.upsellAmt||'?') + ' ₪): ' + t.upsell);
   t.updatedBy = USER; t.updatedAt = today();
   if (!id) t.createdBy = USER;
@@ -689,6 +697,7 @@ function renderCalls(){
         </div>
         ${c.phone?`<div class="task-meta"><a href="tel:${esc(c.phone)}">📞 ${esc(c.phone)}</a></div>`:''}
         ${c.notes?`<div class="task-notes">📝 ${esc(c.notes)}</div>`:''}
+        ${c.doneDesc?`<div class="task-notes" style="background:#EEF3F9;color:#2B5580;font-weight:600">🔧 בוצע: ${esc(c.doneDesc)}${c.doneQty?`<br>📦 כמויות: ${esc(c.doneQty)}`:''}${c.doneBy?`<br><span style="font-weight:500;font-size:12px">דווח ע"י ${esc(c.doneBy)} · ${fmtDate(c.doneAt||'')}</span>`:''}</div>`:''}
         ${c.upsell?`<div class="task-notes" style="background:#EFF7F0;color:#2C6E48;font-weight:600">💰 ${esc(c.upsellType||'מכירה נוספת')}: ${esc(c.upsell)}${c.upsellAmt?` — ${esc(c.upsellAmt)} ₪`:''}${c.updatedBy?` (${esc(c.updatedBy)})`:''}${c.upsellPaid?' · תוגמל ✓':''}</div>`:''}
         ${mediaStrip(c.media)}
         ${claimBlock('call', c)}
@@ -731,6 +740,9 @@ function openCallForm(id){
     <select id="cf_status">${CALL_STATUSES.map(s=>`<option${f.status===s?' selected':''}>${s}</option>`).join('')}</select>
     <label>הערות</label>
     <textarea id="cf_notes" rows="2">${esc(f.notes)}</textarea>
+    <label style="color:#3B6EA5">🔧 דיווח ביצוע — מה בוצע בפועל</label>
+    <textarea id="tf_done" rows="2" placeholder="לדוגמה: הותקנו נקודות תקשורת בקומה 5, בוצעו בדיקות Fluke">${esc(f.doneDesc||'')}</textarea>
+    <input id="tf_doneqty" value="${esc(f.doneQty||'')}" placeholder="כמויות: 12 נק׳ · 3 גלאים · 40 מ׳ כבל" style="margin-top:8px">
     <label style="color:#3E8E5A">💰 מכירה נוספת / ליד (לתיעוד לצורך תגמול)</label>
     <input id="tf_upsell" value="${esc(f.upsell||'')}" placeholder="מה נמכר או זוהה? לדוגמה: מפצל HDMI / הרחבת מצלמות">
     <div class="form-2col" style="margin-top:8px">
@@ -769,6 +781,10 @@ async function saveCall(id){
   c.upsell = (document.getElementById('tf_upsell')||{value:''}).value.trim();
   c.upsellAmt = (document.getElementById('tf_upsellamt')||{value:''}).value.trim().replace(/[^0-9.]/g,'');
   c.upsellType = (document.getElementById('tf_upstype')||{value:''}).value;
+  const prevDoneC = c.doneDesc || '';
+  c.doneDesc = (document.getElementById('tf_done')||{value:''}).value.trim();
+  c.doneQty = (document.getElementById('tf_doneqty')||{value:''}).value.trim();
+  if (c.doneDesc && c.doneDesc !== prevDoneC){ c.doneBy = USER; c.doneAt = today(); pushLog('דיווח ביצוע בקריאה: ' + c.customer); }
   if (c.upsell && c.upsell !== prevUpsC) pushLog('💰 מכירה נוספת (' + (c.upsellAmt||'?') + ' ₪): ' + c.upsell);
   c.updatedBy = USER; c.updatedAt = today();
   if (!id) c.createdBy = USER;
@@ -811,7 +827,7 @@ function buildProjReport(projId){
       msg += `\n📍 *${loc}*\n`;
       arr.forEach(t=>{
         const flag = t.urgency==='דחוף'?'🔴':t.urgency==='גבוה'?'🟠':'🔹';
-        msg += `${flag} ${t.title} — ${t.status}${t.assignee?` (${t.assignee})`:''}\n`;
+        msg += `${flag} ${t.title} — ${t.status}${t.assignee?` (${t.assignee})`:''}${t.doneQty?` | בוצע: ${t.doneQty}`:''}\n`;
       });
     });
     msg += `\nסה"כ: ${items.length} משימות פתוחות`;
