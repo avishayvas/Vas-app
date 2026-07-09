@@ -465,15 +465,15 @@ function renderHome(){
         </div></div></div>`).join('') + `</div>`;
     })()}
     ${(()=>{ if(!isAdmin()) return '';
-      const ups = [...S.tasks.filter(t=>t.upsell).map(t=>({who:t.updatedBy||t.createdBy||'', what:t.upsell, amt:parseFloat(t.upsellAmt)||0, d:t.updatedAt||t.created})), ...S.calls.filter(c=>c.upsell).map(c=>({who:c.updatedBy||c.createdBy||'', what:c.upsell, amt:parseFloat(c.upsellAmt)||0, d:c.updatedAt||c.created}))];
+      const ups = [...S.tasks.filter(t=>t.upsell).map(t=>({kind:'task', id:t.id, who:t.updatedBy||t.createdBy||'', what:t.upsell, type:t.upsellType||'', amt:parseFloat(t.upsellAmt)||0, d:t.updatedAt||t.created, paid:!!t.upsellPaid})), ...S.calls.filter(c=>c.upsell).map(c=>({kind:'call', id:c.id, who:c.updatedBy||c.createdBy||'', what:c.upsell, type:c.upsellType||'', amt:parseFloat(c.upsellAmt)||0, d:c.updatedAt||c.created, paid:!!c.upsellPaid}))];
       if(!ups.length) return '';
-      const month = today().slice(0,7);
-      const mTotal = ups.filter(u=>(u.d||'').slice(0,7)===month).reduce((s,u)=>s+u.amt,0);
-      ups.sort((a,b)=>(b.d||'').localeCompare(a.d||''));
-      return `<div class="card"><div class="card-title" style="color:#3E8E5A">💰 מכירות נוספות${mTotal?` — ${mTotal.toLocaleString()} ₪ החודש`:''}</div>` + ups.slice(0,5).map(u=>`
-        <div class="mini-task" style="cursor:default"><span class="dot" style="background:#3E8E5A"></span>
-        <div><div class="mini-task-title">${esc(u.what)}${u.amt?` — ${u.amt.toLocaleString()} ₪`:''}</div>
-        <div class="mini-task-sub">${esc(u.who)} · ${fmtDate(u.d||'')}</div></div></div>`).join('') + `</div>`;
+      const pending = ups.filter(u=>!u.paid).length;
+      ups.sort((a,b)=>(a.paid===b.paid ? (b.d||'').localeCompare(a.d||'') : (a.paid?1:-1)));
+      return `<div class="card"><div class="card-title" style="color:#3E8E5A">💰 מכירות ולידים לתגמול${pending?` — ${pending} ממתינות`:' — הכל תוגמל ✓'}</div>` + ups.slice(0,6).map(u=>`
+        <div class="mini-task" style="cursor:default;${u.paid?'opacity:.5':''}"><span class="dot" style="background:${u.paid?'#8A8F9C':'#3E8E5A'}"></span>
+        <div style="flex:1"><div class="mini-task-title">${u.type?`[${esc(u.type)}] `:''}${esc(u.what)}${u.amt?` — ${u.amt.toLocaleString()} ₪`:''}</div>
+        <div class="mini-task-sub">${esc(u.who)} · ${fmtDate(u.d||'')}</div></div>
+        <button class="btn-mini" style="background:${u.paid?'#8A8F9C':'#3E8E5A'}" onclick="toggleUpsellPaid('${u.kind}','${u.id}')">${u.paid?'תוגמל ✓':'סמן כתוגמל'}</button></div>`).join('') + `</div>`;
     })()}
     <div class="card">
       <div class="card-title">קריאות שירות פתוחות</div>
@@ -538,7 +538,7 @@ function taskCard(t){
         ${t.closedBy?`<span>🔒 ${esc(t.closedBy)}</span>`:''}
       </div>
       ${t.notes?`<div class="task-notes">📝 ${esc(t.notes)}</div>`:''}
-      ${t.upsell?`<div class="task-notes" style="background:#EFF7F0;color:#2C6E48;font-weight:600">💰 מכירה נוספת: ${esc(t.upsell)}${t.upsellAmt?` — ${esc(t.upsellAmt)} ₪`:''}${t.updatedBy?` (${esc(t.updatedBy)})`:''}</div>`:''}
+      ${t.upsell?`<div class="task-notes" style="background:#EFF7F0;color:#2C6E48;font-weight:600">💰 ${esc(t.upsellType||'מכירה נוספת')}: ${esc(t.upsell)}${t.upsellAmt?` — ${esc(t.upsellAmt)} ₪`:''}${t.updatedBy?` (${esc(t.updatedBy)})`:''}${t.upsellPaid?' · תוגמל ✓':''}</div>`:''}
       ${mediaStrip(taskMedia(t))}
       ${claimBlock('task', t)}
     </div>`;
@@ -584,10 +584,16 @@ function openTaskForm(id){
     <input id="tf_due" type="date" value="${esc(f.due)}">
     <label>הערות</label>
     <textarea id="tf_notes" rows="2" placeholder="פרטים נוספים, חומרים, תיאום…">${esc(f.notes)}</textarea>
-    <label style="color:#3E8E5A">💰 מכירה נוספת ללקוח (אם בוצעה)</label>
-    <div class="form-2col">
-      <div><input id="tf_upsell" value="${esc(f.upsell||'')}" placeholder="לדוגמה: מפצל HDMI + התקנה"></div>
-      <div><input id="tf_upsellamt" value="${esc(f.upsellAmt||'')}" inputmode="decimal" placeholder="סכום ב-₪"></div>
+    <label style="color:#3E8E5A">💰 מכירה נוספת / ליד (לתיעוד לצורך תגמול)</label>
+    <input id="tf_upsell" value="${esc(f.upsell||'')}" placeholder="מה נמכר או זוהה? לדוגמה: מפצל HDMI / הרחבת מצלמות">
+    <div class="form-2col" style="margin-top:8px">
+      <div><select id="tf_upstype">
+        <option value=""${!f.upsellType?' selected':''}>— סוג —</option>
+        <option${f.upsellType==='מוצר'?' selected':''}>מוצר</option>
+        <option${f.upsellType==='עבודה קטנה'?' selected':''}>עבודה קטנה</option>
+        <option${f.upsellType==='ליד לעבודה גדולה'?' selected':''}>ליד לעבודה גדולה</option>
+      </select></div>
+      <div><input id="tf_upsellamt" value="${esc(f.upsellAmt||'')}" inputmode="decimal" placeholder="סכום משוער ב-₪"></div>
     </div>
     <label>תמונות / סרטונים (עד 4)</label>
     <div class="photo-row" id="tf_photos"></div>
@@ -627,6 +633,7 @@ async function saveTask(id){
   const prevUpsT = t.upsell || '';
   t.upsell = (document.getElementById('tf_upsell')||{value:''}).value.trim();
   t.upsellAmt = (document.getElementById('tf_upsellamt')||{value:''}).value.trim().replace(/[^0-9.]/g,'');
+  t.upsellType = (document.getElementById('tf_upstype')||{value:''}).value;
   if (t.upsell && t.upsell !== prevUpsT) pushLog('💰 מכירה נוספת (' + (t.upsellAmt||'?') + ' ₪): ' + t.upsell);
   t.updatedBy = USER; t.updatedAt = today();
   if (!id) t.createdBy = USER;
@@ -682,7 +689,7 @@ function renderCalls(){
         </div>
         ${c.phone?`<div class="task-meta"><a href="tel:${esc(c.phone)}">📞 ${esc(c.phone)}</a></div>`:''}
         ${c.notes?`<div class="task-notes">📝 ${esc(c.notes)}</div>`:''}
-        ${c.upsell?`<div class="task-notes" style="background:#EFF7F0;color:#2C6E48;font-weight:600">💰 מכירה נוספת: ${esc(c.upsell)}${c.upsellAmt?` — ${esc(c.upsellAmt)} ₪`:''}${c.updatedBy?` (${esc(c.updatedBy)})`:''}</div>`:''}
+        ${c.upsell?`<div class="task-notes" style="background:#EFF7F0;color:#2C6E48;font-weight:600">💰 ${esc(c.upsellType||'מכירה נוספת')}: ${esc(c.upsell)}${c.upsellAmt?` — ${esc(c.upsellAmt)} ₪`:''}${c.updatedBy?` (${esc(c.updatedBy)})`:''}${c.upsellPaid?' · תוגמל ✓':''}</div>`:''}
         ${mediaStrip(c.media)}
         ${claimBlock('call', c)}
       </div>`).join('')}
@@ -724,10 +731,16 @@ function openCallForm(id){
     <select id="cf_status">${CALL_STATUSES.map(s=>`<option${f.status===s?' selected':''}>${s}</option>`).join('')}</select>
     <label>הערות</label>
     <textarea id="cf_notes" rows="2">${esc(f.notes)}</textarea>
-    <label style="color:#3E8E5A">💰 מכירה נוספת ללקוח (אם בוצעה)</label>
-    <div class="form-2col">
-      <div><input id="tf_upsell" value="${esc(f.upsell||'')}" placeholder="לדוגמה: מפצל HDMI + התקנה"></div>
-      <div><input id="tf_upsellamt" value="${esc(f.upsellAmt||'')}" inputmode="decimal" placeholder="סכום ב-₪"></div>
+    <label style="color:#3E8E5A">💰 מכירה נוספת / ליד (לתיעוד לצורך תגמול)</label>
+    <input id="tf_upsell" value="${esc(f.upsell||'')}" placeholder="מה נמכר או זוהה? לדוגמה: מפצל HDMI / הרחבת מצלמות">
+    <div class="form-2col" style="margin-top:8px">
+      <div><select id="tf_upstype">
+        <option value=""${!f.upsellType?' selected':''}>— סוג —</option>
+        <option${f.upsellType==='מוצר'?' selected':''}>מוצר</option>
+        <option${f.upsellType==='עבודה קטנה'?' selected':''}>עבודה קטנה</option>
+        <option${f.upsellType==='ליד לעבודה גדולה'?' selected':''}>ליד לעבודה גדולה</option>
+      </select></div>
+      <div><input id="tf_upsellamt" value="${esc(f.upsellAmt||'')}" inputmode="decimal" placeholder="סכום משוער ב-₪"></div>
     </div>
     <label>תמונות / סרטונים (עד 4)</label>
     <div class="photo-row" id="tf_photos"></div>
@@ -755,6 +768,7 @@ async function saveCall(id){
   const prevUpsC = c.upsell || '';
   c.upsell = (document.getElementById('tf_upsell')||{value:''}).value.trim();
   c.upsellAmt = (document.getElementById('tf_upsellamt')||{value:''}).value.trim().replace(/[^0-9.]/g,'');
+  c.upsellType = (document.getElementById('tf_upstype')||{value:''}).value;
   if (c.upsell && c.upsell !== prevUpsC) pushLog('💰 מכירה נוספת (' + (c.upsellAmt||'?') + ' ₪): ' + c.upsell);
   c.updatedBy = USER; c.updatedAt = today();
   if (!id) c.createdBy = USER;
@@ -1057,6 +1071,14 @@ const MAXSTOCK_BRANCHES = [
   { n:"מקס טל חנן — נשר", m:"סאלח", p:"052-7076050" }
 ];
 function branchByName(n){ return MAXSTOCK_BRANCHES.find(b=>b.n===n); }
+function toggleUpsellPaid(kind, id){
+  if (!isAdmin()){ toastMsg('סימון תגמול למנהלים בלבד'); return; }
+  const arr = kind==='task' ? S.tasks : S.calls;
+  const x = arr.find(i=>i.id===id); if(!x) return;
+  x.upsellPaid = !x.upsellPaid;
+  pushLog((x.upsellPaid?'סימן כתוגמל':'ביטל סימון תגמול') + ': ' + (x.upsell||''));
+  persist(); render(); toastMsg(x.upsellPaid?'סומן כתוגמל ✓':'הסימון בוטל');
+}
 function tfRenderLoc(keepVal){
   const wrap = document.getElementById('tf_locwrap'); if (!wrap) return;
   const cur = document.getElementById('tf_loc');
