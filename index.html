@@ -683,7 +683,7 @@ function openCallForm(id){
   const known = !f.customer || siteList().includes(f.customer);
   modalShell(c?'עריכת קריאה':'קריאת שירות חדשה', `
     <label>לקוח / אתר *</label>
-    <select id="cf_site" onchange="document.getElementById('cf_customer_other').style.display = this.value==='__other' ? '' : 'none'">
+    <select id="cf_site" onchange="document.getElementById('cf_customer_other').style.display = this.value==='__other' ? '' : 'none'; var b=branchByName(this.value); if(b){ var ph=document.getElementById('cf_phone'); ph.value=b.p; ph.placeholder='מנהל סניף: '+b.m; }">
       ${siteOptions(f.customer)}
     </select>
     <input id="cf_customer_other" placeholder="שם הלקוח / האתר" value="${known ? '' : esc(f.customer)}" style="margin-top:8px;${known ? 'display:none' : ''}">
@@ -980,12 +980,61 @@ function importBackup(e){
   reader.readAsText(file);
   e.target.value = '';
 }
-const MAXSTOCK_BRANCHES = ["מקס סטוק — אור עקיבא","מקס סטוק — חולון","מקס סטוק — נוף הגליל","מקס סטוק — נתניה איילון","מקס סטוק — נתניה פולג","מקס סטוק — עפולה"];
-function siteList(){ return [...S.projects.filter(p=>p.active).map(p=>p.name), ...MAXSTOCK_BRANCHES]; }
+const MAXSTOCK_BRANCHES = [
+  { n:"ביג מקס — חיפה", m:"דוד אגבייב", p:"054-4453124" },
+  { n:"מיקה מקס — בני ברק", m:"טל כהן", p:"052-8801183" },
+  { n:"מקס אילת", m:"אושרי ממו", p:"052-6737100" },
+  { n:"מקס אור עקיבא", m:"מאור מרציאנו", p:"054-4247741" },
+  { n:"מקס אמות באר שבע", m:"מאיר דהן", p:"050-6521252" },
+  { n:"מקס אשדוד", m:"מאור וקנין", p:"050-4443871" },
+  { n:"מקס אשקלון", m:"עופר קרידיי", p:"050-8130109" },
+  { n:"מקס בארות יצחק", m:"שי וקנין", p:"054-7544445" },
+  { n:"מקס בית שמש", m:"עמית וסקר", p:"052-4794240" },
+  { n:"מקס בת ים", m:"סמי", p:"053-9633720" },
+  { n:"מקס גדרה", m:"ראוף", p:"052-8952891" },
+  { n:"מקס ירושלים (יפו 234)", m:"שרון דרעאי", p:"050-3343313" },
+  { n:"מקס דימונה", m:"הראל דהן", p:"050-2078532" },
+  { n:"מקס חדרה", m:"בר כהן", p:"052-3855344" },
+  { n:"מקס חולון", m:"שלומי בן וקנין", p:"052-4708780" },
+  { n:"מקס טבריה", m:"דביר בן חמו", p:"054-9790871" },
+  { n:"מקס יבנה", m:"מיקי סלק", p:"054-9517070" },
+  { n:"מקס כפר סבא", m:"ארז שוורץ", p:"052-2427742" },
+  { n:"מקס כרמיאל", m:"רבקה", p:"052-6806605" },
+  { n:"מקס מודיעין", m:"לירן ממו", p:"054-6787315" },
+  { n:"מקס מישור אדומים", m:"ארז דהן", p:"053-2272711" },
+  { n:"מקס נהריה", m:"גל אלפסי", p:"054-7751199" },
+  { n:"מקס נוף הגליל", m:"אושרי מרציאנו", p:"054-9102444" },
+  { n:"מקס נשר", m:"סאלח אבו שיבאן", p:"052-7076050" },
+  { n:"מקס נתיבות", m:"דודו ממן", p:"050-7434990" },
+  { n:"מקס נתניה (יד יהלום)", m:"מתי חג'ג'", p:"050-2446133" },
+  { n:"מקס קרית אתא", m:"זך עמרן", p:"054-9259459" },
+  { n:"מקס סטוק קיסריה", m:"תומר חרמון", p:"050-3819155" },
+  { n:"מקס עפולה", m:"ניר אטיאס", p:"054-7483743" },
+  { n:"מקס פולג — נתניה", m:"תומר ויטמן", p:"054-8317080" },
+  { n:"מקס פתח תקווה", m:"אפי ממו", p:"052-5123524" },
+  { n:"מקס קרית אליעזר — חיפה", m:"אורנית", p:"050-2006547" },
+  { n:"מקס קרית גת", m:"נתנאל אלמקייס", p:"054-5466581" },
+  { n:"מקס קרית ים", m:"משה אלימלך", p:"052-7346885" },
+  { n:"מקס ראשון לציון", m:"סוזין בן אלוש", p:"052-6376290" },
+  { n:"מקס רחובות — צומת בילו", m:"אדם מרציאנו", p:"053-8334337" },
+  { n:"מקס רמלה", m:"אסף טייר", p:"050-4000283" },
+  { n:"מקס רעננה", m:"נתנאל דוד", p:"050-4660676" },
+  { n:"מקס שדרות", m:"חן ואקנין", p:"050-2668176" },
+  { n:"מקס שער הכרמל", m:"דוד אברקוב", p:"050-8148211" },
+  { n:"מקס תלפיות — ירושלים", m:"סאלח", p:"052-7076050" },
+  { n:"מקס טל חנן — נשר", m:"סאלח", p:"052-7076050" }
+];
+function branchByName(n){ return MAXSTOCK_BRANCHES.find(b=>b.n===n); }
+function siteList(){ return [...S.projects.filter(p=>p.active).map(p=>p.name), ...MAXSTOCK_BRANCHES.map(b=>b.n)]; }
 function siteOptions(cur){
-  const list = siteList();
-  return list.map(s=>`<option value="${esc(s)}"${cur===s?' selected':''}>${esc(s)}</option>`).join('')
-    + `<option value="__other"${(cur && !list.includes(cur))?' selected':''}>אחר…</option>`;
+  const projs = S.projects.filter(p=>p.active).map(p=>p.name);
+  const branches = MAXSTOCK_BRANCHES.map(b=>b.n);
+  const all = [...projs, ...branches];
+  return `<optgroup label="פרויקטים">` +
+    projs.map(s=>`<option value="${esc(s)}"${cur===s?' selected':''}>${esc(s)}</option>`).join('') +
+    `</optgroup><optgroup label="סניפי מקס סטוק">` +
+    branches.map(s=>`<option value="${esc(s)}"${cur===s?' selected':''}>${esc(s)}</option>`).join('') +
+    `</optgroup><option value="__other"${(cur && !all.includes(cur))?' selected':''}>אחר…</option>`;
 }
 const taskMedia = t => t.media || (t.photoIds||[]).map(id=>({ id, kind:'image' }));
 function mediaStrip(list){
