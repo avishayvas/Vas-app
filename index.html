@@ -144,6 +144,7 @@ main { padding: 14px 14px 20px; max-width: 760px; margin: 0 auto; }
   <div class="vas-side">
     <div class="vas-date" id="hdrDate"></div>
     <div class="conn off" id="connStatus">מתחבר…</div>
+    <div id="userTag" style="font-size:11px;color:#C9962E;font-weight:700"></div>
   </div>
 </header>
 <div id="roBanner" class="readonly-banner" style="display:none">👁️ מצב צפייה בלבד</div>
@@ -176,6 +177,14 @@ const DOC = db.collection('vas').doc('punch');
 const PHOTOS = db.collection('vas');
 
 const READONLY = new URLSearchParams(location.search).get('view') === '1';
+const ADMINS = ["אבישי","ליאל","הילה"];
+let USER = localStorage.getItem('vas:user') || '';
+const isAdmin = () => ADMINS.includes(USER);
+function guardEdit(){
+  if (READONLY) { toastMsg('מצב צפייה — אין אפשרות לערוך'); return false; }
+  if (!USER) { showUserModal(); return false; }
+  return true;
+}
 if (READONLY) document.getElementById('roBanner').style.display = 'block';
 
 /* ==================== Constants ==================== */
@@ -246,14 +255,25 @@ DOC.onSnapshot(snap => {
     S.tasks = S.tasks || []; S.calls = S.calls || [];
   }
   if (!reportProj) { const p = S.projects.find(x=>x.active); reportProj = p?p.id:''; }
+  if (snap.exists && !snap.metadata.hasPendingWrites) serverState = JSON.stringify(S);
   render();
+  if (!READONLY && !USER && !document.querySelector('.modal-overlay')) showUserModal();
 }, err => { console.error(err); setConn(false);
-  document.getElementById('app').innerHTML = '<div class="card empty">אין חיבור למסד הנתונים.<br>בדקו חיבור אינטרנט או הרשאות Firestore (חוקי vas/punch).</div>';
+  const why = (err && err.code === 'permission-denied')
+    ? 'חוקי Firestore חוסמים גישה.<br><b>הפתרון:</b> Firebase ← Firestore ← Rules ← לפרסם את החוק של vas/{docId}'
+    : 'בדקו חיבור אינטרנט';
+  document.getElementById('app').innerHTML = '<div class="card empty">❌ אין חיבור למסד הנתונים.<br>'+why+'</div>';
 });
+let serverState = null;
 
 function persist(){
   if (READONLY) { toastMsg('מצב צפייה — אין אפשרות לערוך'); return Promise.resolve(); }
-  return DOC.set(S).catch(e => { console.error(e); setConn(false); toastMsg('שגיאה בשמירה — בדקו חיבור'); });
+  try { if (serverState) PHOTOS.doc('punch_backup').set({ data: serverState, at: new Date().toISOString(), by: USER||'' }).catch(()=>{}); } catch(e){}
+  return DOC.set(S).catch(e => {
+    console.error(e); setConn(false);
+    if (e && e.code === 'permission-denied') toastMsg('❌ אין הרשאת כתיבה — יש לפרסם את חוקי Firestore');
+    else toastMsg('שגיאה בשמירה — בדקו חיבור');
+  });
 }
 
 /* ---------- photos in Firestore ---------- */
@@ -344,6 +364,8 @@ function goTab(k){ tab = k; render(); window.scrollTo(0,0); }
 function render(){
   if (!S) return;
   renderNav();
+  const ut = document.getElementById('userTag');
+  if (ut) ut.textContent = USER ? '👤 ' + USER : '';
   const app = document.getElementById('app');
   if (tab==='home') app.innerHTML = renderHome();
   else if (tab==='tasks') app.innerHTML = renderTasks();
@@ -453,22 +475,26 @@ function taskCard(t){
         <span>🔧 ${esc(t.discipline)}</span>
         ${t.assignee?`<span>👷 ${esc(t.assignee)}</span>`:''}
         ${t.due?`<span class="${isOverdue(t)?'overdue':''}">📅 ${fmtDate(t.due)}${isOverdue(t)?' ⚠️':''}</span>`:''}
+        ${t.createdBy?`<span>👤 ${esc(t.createdBy)}</span>`:''}
+        ${(t.updatedBy&&t.updatedBy!==t.createdBy)?`<span>✏️ ${esc(t.updatedBy)}</span>`:''}
       </div>
       ${t.notes?`<div class="task-notes">📝 ${esc(t.notes)}</div>`:''}
       ${(t.photoIds&&t.photoIds.length)?`<div class="task-photos">${t.photoIds.map(id=>`<img data-photoid="${id}" onclick="openPhoto('${id}')" alt="">`).join('')}</div>`:''}
     </div>`;
 }
 function cycleTaskStatus(id){
-  if (READONLY) { toastMsg('מצב צפייה — אין אפשרות לערוך'); return; }
+  if (!guardEdit()) return;
   const t = S.tasks.find(x=>x.id===id); if(!t) return;
   t.status = STATUSES[(STATUSES.indexOf(t.status)+1)%STATUSES.length];
+  t.updatedBy = USER; t.updatedAt = today();
+  pushLog('עדכן סטטוס "' + t.title + '" ל-' + t.status);
   persist(); render(); toastMsg('סטטוס עודכן: '+t.status);
 }
 
 /* ---------- Task form ---------- */
 let pendingPhotos = []; // {id?, data} — data present for new, id for existing
 function openTaskForm(id){
-  if (READONLY) { toastMsg('מצב צפייה — אין אפשרות לערוך'); return; }
+  if (!guardEdit()) return;
   const t = id ? S.tasks.find(x=>x.id===id) : null;
   pendingPhotos = t ? (t.photoIds||[]).map(pid=>({id:pid})) : [];
   const f = t || { projectId:(S.projects.find(p=>p.active)||{}).id||'', title:'', location:'', discipline:'כללי', assignee:'', urgency:'רגיל', status:'פתוח', due:'', notes:'' };
@@ -499,7 +525,7 @@ function openTaskForm(id){
     <div class="photo-row" id="tf_photos"></div>
     <input id="tf_file" type="file" accept="image/*" style="display:none">
     <div class="form-actions">
-      ${t?`<button class="btn-danger" onclick="deleteTask('${t.id}')">מחיקה</button>`:''}
+      ${(t&&isAdmin())?`<button class="btn-danger" onclick="deleteTask('${t.id}')">מחיקה</button>`:''}
       <button class="btn-primary" onclick="saveTask('${t?t.id:''}')">שמירה</button>
     </div>`);
   renderFormPhotos();
@@ -539,6 +565,9 @@ async function saveTask(id){
   t.status = document.getElementById('tf_status').value;
   t.due = document.getElementById('tf_due').value;
   t.notes = document.getElementById('tf_notes').value.trim();
+  t.updatedBy = USER; t.updatedAt = today();
+  if (!id) t.createdBy = USER;
+  pushLog((id?'עדכן':'פתח') + ' משימה: ' + t.title);
 
   toastMsg('שומר…');
   const ids = [];
@@ -555,7 +584,9 @@ async function saveTask(id){
   closeModal(); render(); toastMsg('המשימה נשמרה ✓');
 }
 async function deleteTask(id){
+  if (!isAdmin()) { toastMsg('מחיקה למנהלים בלבד'); return; }
   if (!confirm('למחוק את המשימה?')) return;
+  const _t = S.tasks.find(x=>x.id===id); pushLog('מחק משימה: ' + (_t?_t.title:''));
   const t = S.tasks.find(x=>x.id===id);
   if (t && t.photoIds) deletePhotoDocs(t.photoIds);
   S.tasks = S.tasks.filter(x=>x.id!==id);
@@ -586,13 +617,15 @@ function renderCalls(){
     ${READONLY?'':'<button class="fab" onclick="openCallForm()">＋ קריאה חדשה</button>'}`;
 }
 function cycleCallStatus(id){
-  if (READONLY) { toastMsg('מצב צפייה — אין אפשרות לערוך'); return; }
+  if (!guardEdit()) return;
   const c = S.calls.find(x=>x.id===id); if(!c) return;
   c.status = CALL_STATUSES[(CALL_STATUSES.indexOf(c.status)+1)%CALL_STATUSES.length];
+  c.updatedBy = USER; c.updatedAt = today();
+  pushLog('עדכן קריאה "' + c.customer + '" ל-' + c.status);
   persist(); render(); toastMsg('סטטוס: '+c.status);
 }
 function openCallForm(id){
-  if (READONLY) { toastMsg('מצב צפייה — אין אפשרות לערוך'); return; }
+  if (!guardEdit()) return;
   const c = id ? S.calls.find(x=>x.id===id) : null;
   const f = c || { customer:'', desc:'', phone:'', technician:'', urgency:'רגיל', status:'חדשה', notes:'' };
   modalShell(c?'עריכת קריאה':'קריאת שירות חדשה', `
@@ -613,7 +646,7 @@ function openCallForm(id){
     <label>הערות</label>
     <textarea id="cf_notes" rows="2">${esc(f.notes)}</textarea>
     <div class="form-actions">
-      ${c?`<button class="btn-danger" onclick="deleteCall('${c.id}')">מחיקה</button>`:''}
+      ${(c&&isAdmin())?`<button class="btn-danger" onclick="deleteCall('${c.id}')">מחיקה</button>`:''}
       <button class="btn-primary" onclick="saveCall('${c?c.id:''}')">שמירה</button>
     </div>`);
 }
@@ -628,12 +661,17 @@ async function saveCall(id){
   c.urgency = document.getElementById('cf_urg').value;
   c.status = document.getElementById('cf_status').value;
   c.notes = document.getElementById('cf_notes').value.trim();
+  c.updatedBy = USER; c.updatedAt = today();
+  if (!id) c.createdBy = USER;
+  pushLog((id?'עדכן':'פתח') + ' קריאה: ' + c.customer);
   if (!id) S.calls.unshift(c);
   await persist();
   closeModal(); render(); toastMsg('הקריאה נשמרה ✓');
 }
 async function deleteCall(id){
+  if (!isAdmin()) { toastMsg('מחיקה למנהלים בלבד'); return; }
   if (!confirm('למחוק את הקריאה?')) return;
+  const _c = S.calls.find(x=>x.id===id); pushLog('מחק קריאה: ' + (_c?_c.customer:''));
   S.calls = S.calls.filter(x=>x.id!==id);
   await persist();
   closeModal(); render(); toastMsg('הקריאה נמחקה');
@@ -717,7 +755,15 @@ function waReport(kind){
 function renderSettings(){
   return `
     <div class="card">
-      <div class="card-title">פרויקטים ${READONLY?'':'<button class="btn-mini" onclick="openProjForm()">＋ הוספה</button>'}</div>
+      <div class="card-title">משתמש נוכחי</div>
+      <div class="settings-row" style="cursor:default">
+        <div><div class="settings-name">${esc(USER||'לא נבחר')}</div>
+        <div class="settings-sub">${USER?(isAdmin()?'מנהל — הרשאות מלאות':'הרשאות עדכון בלבד (ללא מחיקה)'):'יש לבחור משתמש'}</div></div>
+        <button class="btn-mini" onclick="switchUser()">החלפה</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">פרויקטים ${(!READONLY&&isAdmin())?'<button class="btn-mini" onclick="openProjForm()">＋ הוספה</button>':''}</div>
       ${S.projects.map(p=>`
         <div class="settings-row${p.active?'':' inactive'}" onclick="openProjForm('${p.id}')">
           <div><div class="settings-name">${esc(p.name)}</div>
@@ -726,7 +772,7 @@ function renderSettings(){
         </div>`).join('')}
     </div>
     <div class="card">
-      <div class="card-title">צוות ${READONLY?'':'<button class="btn-mini" onclick="openMemberForm()">＋ הוספה</button>'}</div>
+      <div class="card-title">צוות ${(!READONLY&&isAdmin())?'<button class="btn-mini" onclick="openMemberForm()">＋ הוספה</button>':''}</div>
       ${['עובד','קבלן'].map(kind=>`
         <div class="team-kind">${kind==='עובד'?'עובדים':'קבלני משנה'}</div>
         ${S.team.filter(m=>m.kind===kind).map(m=>`
@@ -739,11 +785,21 @@ function renderSettings(){
       <div class="card-title">גיבוי ושחזור</div>
       <div class="form-actions" style="margin-top:4px">
         <button class="btn-secondary" onclick="exportBackup()">⬇️ ייצוא גיבוי</button>
-        ${READONLY?'':'<button class="btn-secondary" onclick="document.getElementById(\'importFile\').click()">⬆️ שחזור מגיבוי</button>'}
+        ${isAdmin()?'<button class="btn-secondary" onclick="restoreBackup()">↩️ שחזור אחרון</button>':''}
+        ${(!READONLY&&isAdmin())?'<button class="btn-secondary" onclick="document.getElementById(\'importFile\').click()">⬆️ שחזור מגיבוי</button>':''}
       </div>
       <input id="importFile" type="file" accept=".json" style="display:none" onchange="importBackup(event)">
       <div class="settings-sub" style="margin-top:8px">הגיבוי כולל פרויקטים, צוות, משימות וקריאות (ללא תמונות). מומלץ לייצא פעם בחודש.</div>
     </div>
+    ${isAdmin()?`
+    <div class="card">
+      <div class="card-title">📜 יומן פעילות (15 אחרונות)</div>
+      ${(S.log||[]).slice(0,15).map(l=>`
+        <div class="settings-row" style="cursor:default">
+          <div><div class="settings-sub">${esc(l.d)} · ${esc(l.u)}</div>
+          <div style="font-size:13px;font-weight:500">${esc(l.a)}</div></div>
+        </div>`).join('') || '<div class="empty">אין פעילות עדיין</div>'}
+    </div>`:''}
     <div class="card">
       <div class="card-title">קישור צפייה בלבד</div>
       <div class="settings-sub">שיתוף עם לקוח או מפקח — רואים הכל, לא עורכים כלום:</div>
@@ -753,7 +809,8 @@ function renderSettings(){
     </div>`;
 }
 function openProjForm(id){
-  if (READONLY) { toastMsg('מצב צפייה — אין אפשרות לערוך'); return; }
+  if (!guardEdit()) return;
+  if (!isAdmin()) { toastMsg('ניהול פרויקטים למנהלים בלבד'); return; }
   const p = id ? S.projects.find(x=>x.id===id) : null;
   const f = p || { name:'', client:'', type:'', desc:'', active:true };
   modalShell(p?'עריכת פרויקט':'פרויקט חדש', `
@@ -763,7 +820,7 @@ function openProjForm(id){
     <label>תיאור</label><input id="pf_desc" value="${esc(f.desc)}">
     <label class="toggle-row"><input id="pf_active" type="checkbox" ${f.active?'checked':''}> פרויקט פעיל</label>
     <div class="form-actions">
-      ${p?`<button class="btn-danger" onclick="deleteProj('${p.id}')">מחיקה</button>`:''}
+      ${(p&&isAdmin())?`<button class="btn-danger" onclick="deleteProj('${p.id}')">מחיקה</button>`:''}
       <button class="btn-primary" onclick="saveProj('${p?p.id:''}')">שמירה</button>
     </div>`);
 }
@@ -780,6 +837,7 @@ async function saveProj(id){
   await persist(); closeModal(); render(); toastMsg('הפרויקט נשמר ✓');
 }
 async function deleteProj(id){
+  if (!isAdmin()) { toastMsg('מחיקה למנהלים בלבד'); return; }
   const count = S.tasks.filter(t=>t.projectId===id).length;
   if (!confirm(count ? `לפרויקט יש ${count} משימות שיימחקו יחד איתו. למחוק?` : 'למחוק את הפרויקט?')) return;
   S.tasks.filter(t=>t.projectId===id).forEach(t=>{ if(t.photoIds) deletePhotoDocs(t.photoIds); });
@@ -788,7 +846,8 @@ async function deleteProj(id){
   await persist(); closeModal(); render(); toastMsg('הפרויקט נמחק');
 }
 function openMemberForm(id){
-  if (READONLY) { toastMsg('מצב צפייה — אין אפשרות לערוך'); return; }
+  if (!guardEdit()) return;
+  if (!isAdmin()) { toastMsg('ניהול צוות למנהלים בלבד'); return; }
   const m = id ? S.team.find(x=>x.id===id) : null;
   const f = m || { name:'', role:'טכנאי', kind:'עובד' };
   modalShell(m?'עריכת איש צוות':'איש צוות חדש', `
@@ -797,7 +856,7 @@ function openMemberForm(id){
     <label>סוג</label>
     <select id="mf_kind"><option value="עובד"${f.kind==='עובד'?' selected':''}>עובד</option><option value="קבלן"${f.kind==='קבלן'?' selected':''}>קבלן משנה</option></select>
     <div class="form-actions">
-      ${m?`<button class="btn-danger" onclick="deleteMember('${m.id}')">מחיקה</button>`:''}
+      ${(m&&isAdmin())?`<button class="btn-danger" onclick="deleteMember('${m.id}')">מחיקה</button>`:''}
       <button class="btn-primary" onclick="saveMember('${m?m.id:''}')">שמירה</button>
     </div>`);
 }
@@ -812,6 +871,7 @@ async function saveMember(id){
   await persist(); closeModal(); render(); toastMsg('איש הצוות נשמר ✓');
 }
 async function deleteMember(id){
+  if (!isAdmin()) { toastMsg('מחיקה למנהלים בלבד'); return; }
   if (!confirm('למחוק את איש הצוות?')) return;
   S.team = S.team.filter(x=>x.id!==id);
   await persist(); closeModal(); render(); toastMsg('איש הצוות נמחק');
@@ -828,6 +888,7 @@ function exportBackup(){
   toastMsg('הגיבוי הורד ✓');
 }
 function importBackup(e){
+  if (!isAdmin()) { toastMsg('שחזור למנהלים בלבד'); return; }
   const file = e.target.files && e.target.files[0];
   if (!file) return;
   const reader = new FileReader();
@@ -843,6 +904,40 @@ function importBackup(e){
   };
   reader.readAsText(file);
   e.target.value = '';
+}
+function showUserModal(){
+  const team = (S && S.team && S.team.length) ? S.team : [];
+  modalShell('מי אתה?', `
+    <div class="settings-sub" style="margin-bottom:10px">בחרו את השם שלכם — כל פעולה במערכת תתועד על שמכם</div>
+    ${team.map(m=>`<button class="btn-secondary" style="width:100%;margin-bottom:8px;text-align:right" onclick="setUser('${esc(m.name)}')">${esc(m.name)} · ${esc(m.role)}</button>`).join('') || '<div class="empty">טוען רשימת צוות…</div>'}`);
+}
+function setUser(n){
+  USER = n; localStorage.setItem('vas:user', n);
+  closeModal(); render(); toastMsg('ברוך הבא, ' + n + ' 👋');
+}
+function switchUser(){
+  localStorage.removeItem('vas:user'); USER = '';
+  render(); showUserModal();
+}
+function pushLog(a){
+  if (!S) return;
+  S.log = S.log || [];
+  const d = new Date();
+  const stamp = fmtDate(today()) + ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+  S.log.unshift({ d: stamp, u: USER || '?', a });
+  if (S.log.length > 150) S.log.length = 150;
+}
+async function restoreBackup(){
+  if (!isAdmin()) { toastMsg('שחזור למנהלים בלבד'); return; }
+  try {
+    const snap = await PHOTOS.doc('punch_backup').get();
+    if (!snap.exists) { toastMsg('אין גיבוי אוטומטי עדיין'); return; }
+    const b = snap.data();
+    if (!confirm('לשחזר את המצב שלפני השינוי האחרון (' + (b.at||'').slice(0,16).replace('T',' ') + ' / ' + (b.by||'') + ')?')) return;
+    S = JSON.parse(b.data);
+    pushLog('שחזר גיבוי אוטומטי');
+    await persist(); render(); toastMsg('הגיבוי שוחזר ✓');
+  } catch(e) { console.error(e); toastMsg('שגיאה בשחזור'); }
 }
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(()=>{}));
