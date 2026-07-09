@@ -539,6 +539,7 @@ function taskCard(t){
       </div>
       ${t.notes?`<div class="task-notes">📝 ${esc(t.notes)}</div>`:''}
       ${t.doneDesc?`<div class="task-notes" style="background:#EEF3F9;color:#2B5580;font-weight:600">🔧 בוצע: ${esc(t.doneDesc)}${t.doneQty?`<br>📦 כמויות: ${esc(t.doneQty)}`:''}${t.doneBy?`<br><span style="font-weight:500;font-size:12px">דווח ע"י ${esc(t.doneBy)} · ${fmtDate(t.doneAt||'')}</span>`:''}</div>`:''}
+      ${t.report?`<div class="task-notes" style="background:#EEF3FA;color:#2B4E77;font-weight:600">🛠️ בוצע: ${esc(t.report)}${t.qty?` · ${esc(t.qty)}`:''}</div>`:''}
       ${t.upsell?`<div class="task-notes" style="background:#EFF7F0;color:#2C6E48;font-weight:600">💰 ${esc(t.upsellType||'מכירה נוספת')}: ${esc(t.upsell)}${t.upsellAmt?` — ${esc(t.upsellAmt)} ₪`:''}${t.updatedBy?` (${esc(t.updatedBy)})`:''}${t.upsellPaid?' · תוגמל ✓':''}</div>`:''}
       ${mediaStrip(taskMedia(t))}
       ${claimBlock('task', t)}
@@ -547,7 +548,9 @@ function taskCard(t){
 function cycleTaskStatus(id){
   if (!guardEdit()) return;
   const t = S.tasks.find(x=>x.id===id); if(!t) return;
-  t.status = STATUSES[(STATUSES.indexOf(t.status)+1)%STATUSES.length];
+  const nextT = STATUSES[(STATUSES.indexOf(t.status)+1)%STATUSES.length];
+  if (nextT === 'בוצע'){ openReportModal('task', id, nextT); return; }
+  t.status = nextT;
   t.updatedBy = USER; t.updatedAt = today();
   if (t.status === 'אושר'){ t.closedBy = USER; t.closedAt = today(); }
   else { t.closedBy = ''; t.closedAt = ''; }
@@ -588,6 +591,9 @@ function openTaskForm(id){
     <label style="color:#3B6EA5">🔧 דיווח ביצוע — מה בוצע בפועל</label>
     <textarea id="tf_done" rows="2" placeholder="לדוגמה: הותקנו נקודות תקשורת בקומה 5, בוצעו בדיקות Fluke">${esc(f.doneDesc||'')}</textarea>
     <input id="tf_doneqty" value="${esc(f.doneQty||'')}" placeholder="כמויות: 12 נק׳ · 3 גלאים · 40 מ׳ כבל" style="margin-top:8px">
+    <label style="color:#3B6EA5">🛠️ דיווח ביצוע — מה בוצע בפועל</label>
+    <textarea id="tf_report" rows="2" placeholder="לדוגמה: הותקנו נקודות בקומה 3, בוצעו בדיקות Fluke">${esc(f.report||'')}</textarea>
+    <input id="tf_qty" value="${esc(f.qty||'')}" placeholder="כמות — לדוגמה: 12 נקודות / 3 מצלמות" style="margin-top:8px">
     <label style="color:#3E8E5A">💰 מכירה נוספת / ליד (לתיעוד לצורך תגמול)</label>
     <input id="tf_upsell" value="${esc(f.upsell||'')}" placeholder="מה נמכר או זוהה? לדוגמה: מפצל HDMI / הרחבת מצלמות">
     <div class="form-2col" style="margin-top:8px">
@@ -638,6 +644,8 @@ async function saveTask(id){
   t.upsell = (document.getElementById('tf_upsell')||{value:''}).value.trim();
   t.upsellAmt = (document.getElementById('tf_upsellamt')||{value:''}).value.trim().replace(/[^0-9.]/g,'');
   t.upsellType = (document.getElementById('tf_upstype')||{value:''}).value;
+  t.report = (document.getElementById('tf_report')||{value:''}).value.trim();
+  t.qty = (document.getElementById('tf_qty')||{value:''}).value.trim();
   const prevDoneT = t.doneDesc || '';
   t.doneDesc = (document.getElementById('tf_done')||{value:''}).value.trim();
   t.doneQty = (document.getElementById('tf_doneqty')||{value:''}).value.trim();
@@ -698,6 +706,7 @@ function renderCalls(){
         ${c.phone?`<div class="task-meta"><a href="tel:${esc(c.phone)}">📞 ${esc(c.phone)}</a></div>`:''}
         ${c.notes?`<div class="task-notes">📝 ${esc(c.notes)}</div>`:''}
         ${c.doneDesc?`<div class="task-notes" style="background:#EEF3F9;color:#2B5580;font-weight:600">🔧 בוצע: ${esc(c.doneDesc)}${c.doneQty?`<br>📦 כמויות: ${esc(c.doneQty)}`:''}${c.doneBy?`<br><span style="font-weight:500;font-size:12px">דווח ע"י ${esc(c.doneBy)} · ${fmtDate(c.doneAt||'')}</span>`:''}</div>`:''}
+        ${c.report?`<div class="task-notes" style="background:#EEF3FA;color:#2B4E77;font-weight:600">🛠️ בוצע: ${esc(c.report)}${c.qty?` · ${esc(c.qty)}`:''}</div>`:''}
         ${c.upsell?`<div class="task-notes" style="background:#EFF7F0;color:#2C6E48;font-weight:600">💰 ${esc(c.upsellType||'מכירה נוספת')}: ${esc(c.upsell)}${c.upsellAmt?` — ${esc(c.upsellAmt)} ₪`:''}${c.updatedBy?` (${esc(c.updatedBy)})`:''}${c.upsellPaid?' · תוגמל ✓':''}</div>`:''}
         ${mediaStrip(c.media)}
         ${claimBlock('call', c)}
@@ -707,7 +716,9 @@ function renderCalls(){
 function cycleCallStatus(id){
   if (!guardEdit()) return;
   const c = S.calls.find(x=>x.id===id); if(!c) return;
-  c.status = CALL_STATUSES[(CALL_STATUSES.indexOf(c.status)+1)%CALL_STATUSES.length];
+  const nextC = CALL_STATUSES[(CALL_STATUSES.indexOf(c.status)+1)%CALL_STATUSES.length];
+  if (nextC === 'נסגרה'){ openReportModal('call', id, nextC); return; }
+  c.status = nextC;
   c.updatedBy = USER; c.updatedAt = today();
   if (c.status === 'נסגרה'){ c.closedBy = USER; c.closedAt = today(); }
   else { c.closedBy = ''; c.closedAt = ''; }
@@ -743,6 +754,9 @@ function openCallForm(id){
     <label style="color:#3B6EA5">🔧 דיווח ביצוע — מה בוצע בפועל</label>
     <textarea id="tf_done" rows="2" placeholder="לדוגמה: הותקנו נקודות תקשורת בקומה 5, בוצעו בדיקות Fluke">${esc(f.doneDesc||'')}</textarea>
     <input id="tf_doneqty" value="${esc(f.doneQty||'')}" placeholder="כמויות: 12 נק׳ · 3 גלאים · 40 מ׳ כבל" style="margin-top:8px">
+    <label style="color:#3B6EA5">🛠️ דיווח ביצוע — מה בוצע בפועל</label>
+    <textarea id="tf_report" rows="2" placeholder="לדוגמה: הותקנו נקודות בקומה 3, בוצעו בדיקות Fluke">${esc(f.report||'')}</textarea>
+    <input id="tf_qty" value="${esc(f.qty||'')}" placeholder="כמות — לדוגמה: 12 נקודות / 3 מצלמות" style="margin-top:8px">
     <label style="color:#3E8E5A">💰 מכירה נוספת / ליד (לתיעוד לצורך תגמול)</label>
     <input id="tf_upsell" value="${esc(f.upsell||'')}" placeholder="מה נמכר או זוהה? לדוגמה: מפצל HDMI / הרחבת מצלמות">
     <div class="form-2col" style="margin-top:8px">
@@ -781,6 +795,8 @@ async function saveCall(id){
   c.upsell = (document.getElementById('tf_upsell')||{value:''}).value.trim();
   c.upsellAmt = (document.getElementById('tf_upsellamt')||{value:''}).value.trim().replace(/[^0-9.]/g,'');
   c.upsellType = (document.getElementById('tf_upstype')||{value:''}).value;
+  c.report = (document.getElementById('tf_report')||{value:''}).value.trim();
+  c.qty = (document.getElementById('tf_qty')||{value:''}).value.trim();
   const prevDoneC = c.doneDesc || '';
   c.doneDesc = (document.getElementById('tf_done')||{value:''}).value.trim();
   c.doneQty = (document.getElementById('tf_doneqty')||{value:''}).value.trim();
@@ -1087,6 +1103,37 @@ const MAXSTOCK_BRANCHES = [
   { n:"מקס טל חנן — נשר", m:"סאלח", p:"052-7076050" }
 ];
 function branchByName(n){ return MAXSTOCK_BRANCHES.find(b=>b.n===n); }
+function openReportModal(kind, id, nextStatus){
+  const arr = kind === 'task' ? S.tasks : S.calls;
+  const x = arr.find(i=>i.id===id); if (!x) return;
+  modalShell('🛠️ דיווח ביצוע', `
+    <div class="settings-sub" style="margin-bottom:10px"><b>${esc(kind==='task'?x.title:x.customer)}</b> — לפני הסגירה, כמה מילים על מה בוצע:</div>
+    <label>מה בוצע בפועל</label>
+    <textarea id="rp_text" rows="3" placeholder="לדוגמה: הותקנו נקודות בקומה 3, הוחלף גלאי, בוצעו בדיקות">${esc(x.report||'')}</textarea>
+    <label>כמות</label>
+    <input id="rp_qty" value="${esc(x.qty||'')}" placeholder="12 נקודות / 3 מצלמות / יחידה 1">
+    <div class="form-actions">
+      <button class="btn-secondary" onclick="applyReport('${kind}','${id}','${esc(nextStatus)}',true)">דילוג</button>
+      <button class="btn-primary" onclick="applyReport('${kind}','${id}','${esc(nextStatus)}',false)">שמירה וסגירה ✓</button>
+    </div>`);
+}
+function applyReport(kind, id, nextStatus, skip){
+  const arr = kind === 'task' ? S.tasks : S.calls;
+  const x = arr.find(i=>i.id===id); if (!x) return;
+  if (!skip){
+    x.report = (document.getElementById('rp_text')||{value:''}).value.trim();
+    x.qty = (document.getElementById('rp_qty')||{value:''}).value.trim();
+  }
+  x.status = nextStatus;
+  x.updatedBy = USER; x.updatedAt = today();
+  if (kind === 'task'){
+    if (x.status === 'אושר'){ x.closedBy = USER; x.closedAt = today(); } else { x.closedBy = ''; x.closedAt = ''; }
+  } else {
+    if (x.status === 'נסגרה'){ x.closedBy = USER; x.closedAt = today(); } else { x.closedBy = ''; x.closedAt = ''; }
+  }
+  pushLog('עדכן סטטוס "' + (kind==='task'?x.title:x.customer) + '" ל-' + nextStatus + (x.report && !skip ? ' · דיווח: ' + x.report.slice(0,60) : ''));
+  closeModal(); persist(); render(); toastMsg('סטטוס עודכן: ' + nextStatus);
+}
 function toggleUpsellPaid(kind, id){
   if (!isAdmin()){ toastMsg('סימון תגמול למנהלים בלבד'); return; }
   const arr = kind==='task' ? S.tasks : S.calls;
