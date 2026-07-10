@@ -125,6 +125,12 @@ main { padding: 14px 14px 20px; max-width: 760px; margin: 0 auto; }
 .photo-overlay img { max-width: 94vw; max-height: 80vh; border-radius: 10px; }
 .photo-overlay div { color: #fff; font-weight: 700; cursor: pointer; }
 
+.login-screen { position: fixed; inset: 0; background: #1B1F2A; z-index: 100; display: none; align-items: center; justify-content: center; padding: 20px; }
+.login-box { background: #fff; border-radius: 16px; padding: 26px 22px; width: 100%; max-width: 380px; text-align: center; }
+.login-box label { display: block; text-align: right; font-size: 12.5px; font-weight: 700; color: #555B69; margin: 12px 0 4px; }
+.login-box input { width: 100%; padding: 12px; border: 1.5px solid #E2DFD5; border-radius: 10px; font-family: inherit; font-size: 15px; background: #FBFAF7; }
+.login-box input:focus { outline: 2px solid #C9962E; border-color: #C9962E; }
+.login-err { color: #D64545; font-size: 13px; font-weight: 600; margin: 10px 0 4px; min-height: 18px; }
 .readonly-banner { background: #C9962E; color: #1B1F2A; text-align: center; font-weight: 800; font-size: 13px; padding: 6px; }
 
 .vid-thumb { width: 54px; height: 54px; border-radius: 8px; background: #1B1F2A; color: #C9962E; display: flex; align-items: center; justify-content: center; font-size: 20px; cursor: pointer; border: 1px solid #E2DFD5; flex-shrink: 0; }
@@ -137,6 +143,7 @@ main { padding: 14px 14px 20px; max-width: 760px; margin: 0 auto; }
 </style>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 </head>
 <body>
 
@@ -163,6 +170,18 @@ main { padding: 14px 14px 20px; max-width: 760px; margin: 0 auto; }
   <video id="photoOverlayVid" controls playsinline webkit-playsinline style="max-width:94vw;max-height:80vh;border-radius:10px;display:none"></video>
   <div onclick="closeMedia()">✕ סגירה</div>
 </div>
+<div id="loginScreen" class="login-screen">
+  <div class="login-box">
+    <div class="vas-brand" style="font-size:26px">VAS <span>SECURITY</span></div>
+    <div class="vas-sub" style="margin:4px 0 16px">כניסה למערכת ניהול הפרויקטים</div>
+    <label>אימייל</label>
+    <input id="li_email" type="email" inputmode="email" autocomplete="username" dir="ltr">
+    <label>סיסמה</label>
+    <input id="li_pass" type="password" autocomplete="current-password" dir="ltr" onkeydown="if(event.key==='Enter')doLogin()">
+    <div class="login-err" id="li_err"></div>
+    <button class="btn-primary" style="width:100%" onclick="doLogin()">התחברות</button>
+  </div>
+</div>
 <div id="modalRoot"></div>
 
 <script>
@@ -187,7 +206,7 @@ let USER = localStorage.getItem('vas:user') || '';
 const isAdmin = () => ADMINS.includes(USER);
 function guardEdit(){
   if (READONLY) { toastMsg('מצב צפייה — אין אפשרות לערוך'); return false; }
-  if (!USER) { showUserModal(); return false; }
+  if (!USER) { toastMsg('החשבון לא משויך לאיש צוות — מנהל צריך להזין את האימייל שלכם בצוות'); return false; }
   return true;
 }
 if (READONLY) document.getElementById('roBanner').style.display = 'block';
@@ -249,7 +268,100 @@ document.getElementById('hdrDate').textContent = fmtDate(today());
 const connEl = document.getElementById('connStatus');
 function setConn(on){ connEl.textContent = on ? '● מסונכרן' : '● לא מחובר'; connEl.className = 'conn ' + (on?'on':'off'); }
 
-DOC.onSnapshot(snap => {
+const auth = firebase.auth();
+let authUser = null;
+let unsubData = null;
+function doLogin(){
+  const em = document.getElementById('li_email').value.trim();
+  const pw = document.getElementById('li_pass').value;
+  const errEl = document.getElementById('li_err');
+  errEl.textContent = '';
+  if (!em || !pw){ errEl.textContent = 'נא למלא אימייל וסיסמה'; return; }
+  errEl.textContent = 'מתחבר…'; errEl.style.color = '#6B7080';
+  auth.signInWithEmailAndPassword(em, pw).catch(e => {
+    errEl.style.color = '#D64545';
+    errEl.textContent =
+      e.code === 'auth/operation-not-allowed' ? 'שיטת Email/Password לא הופעלה עדיין ב-Firebase' :
+      (e.code === 'auth/invalid-credential' || e.code === 'auth/wrong-password' || e.code === 'auth/user-not-found' || e.code === 'auth/invalid-email') ? 'אימייל או סיסמה שגויים' :
+      e.code === 'auth/too-many-requests' ? 'יותר מדי ניסיונות — נסו שוב בעוד כמה דקות' :
+      'שגיאת התחברות: ' + (e.code || '');
+  });
+}
+function doLogout(){ if (confirm('להתנתק מהמערכת?')) auth.signOut(); }
+function bindUserFromAuth(){
+  if (!authUser || !S){ return; }
+  const em = (authUser.email || '').toLowerCase();
+  const m = S.team.find(t => (t.email || '').toLowerCase() === em);
+  USER = m ? m.name : '';
+  if (USER) localStorage.setItem('vas:user', USER);
+}
+function showBootstrapModal(){
+  modalShell('שיוך חשבון ראשון', `
+    <div class="settings-sub" style="margin-bottom:10px">זו הכניסה הראשונה למערכת עם סיסמה.<br>בחרו מי אתם כדי לשייך את החשבון <b dir="ltr">${esc(authUser?authUser.email:'')}</b>:</div>
+    ${S.team.map(m=>`<button class="btn-secondary" style="width:100%;margin-bottom:8px;text-align:right" onclick="claimBootstrap('${m.id}')">${esc(m.name)} · ${esc(m.role)}</button>`).join('')}`);
+}
+async function claimBootstrap(memberId){
+  const m = S.team.find(x=>x.id===memberId); if (!m || !authUser) return;
+  m.email = authUser.email;
+  pushLog('שיוך חשבון ראשוני: ' + m.name + ' ← ' + authUser.email);
+  await persist();
+  bindUserFromAuth();
+  closeModal(); render(); toastMsg('ברוך הבא, ' + m.name + ' 👋');
+}
+async function createLogin(memberId){
+  if (!isAdmin()){ toastMsg('יצירת כניסות למנהלים בלבד'); return; }
+  const m = S.team.find(x=>x.id===memberId); if (!m) return;
+  const emEl = document.getElementById('mf_email');
+  const em = (emEl ? emEl.value : (m.email || '')).trim();
+  if (!em){ toastMsg('קודם מלאו אימייל לאיש הצוות'); return; }
+  const pw = prompt('סיסמה ראשונית עבור ' + m.name + ' (לפחות 6 תווים):');
+  if (!pw) return;
+  try {
+    const sec = firebase.apps.find(a => a.name === 'sec') || firebase.initializeApp(firebaseConfig, 'sec');
+    await sec.auth().createUserWithEmailAndPassword(em, pw);
+    await sec.auth().signOut();
+    m.email = em;
+    pushLog('יצר כניסה עבור ' + m.name + ' (' + em + ')');
+    await persist();
+    closeModal(); render();
+    toastMsg('הכניסה נוצרה ✓ מסרו ל' + m.name + ' את הפרטים');
+  } catch(e){
+    if (e.code === 'auth/email-already-in-use'){ m.email = em; pushLog('שייך אימייל קיים ל' + m.name); await persist(); closeModal(); render(); toastMsg('האימייל כבר רשום — שויך לאיש הצוות ✓'); }
+    else if (e.code === 'auth/operation-not-allowed') toastMsg('יש להפעיל Email/Password ב-Firebase ← Authentication');
+    else if (e.code === 'auth/weak-password') toastMsg('סיסמה חלשה — לפחות 6 תווים');
+    else if (e.code === 'auth/invalid-email') toastMsg('כתובת אימייל לא תקינה');
+    else toastMsg('שגיאה: ' + (e.code || ''));
+  }
+}
+async function changeMyPassword(){
+  if (!authUser){ toastMsg('לא מחובר'); return; }
+  const cur = prompt('סיסמה נוכחית:'); if (!cur) return;
+  const nw = prompt('סיסמה חדשה (לפחות 6 תווים):'); if (!nw) return;
+  try {
+    const cred = firebase.auth.EmailAuthProvider.credential(authUser.email, cur);
+    await authUser.reauthenticateWithCredential(cred);
+    await authUser.updatePassword(nw);
+    toastMsg('הסיסמה עודכנה ✓');
+  } catch(e){
+    toastMsg((e.code === 'auth/wrong-password' || e.code === 'auth/invalid-credential') ? 'סיסמה נוכחית שגויה' : e.code === 'auth/weak-password' ? 'סיסמה חלשה — לפחות 6 תווים' : 'שגיאה: ' + (e.code || ''));
+  }
+}
+auth.onAuthStateChanged(u => {
+  authUser = u;
+  const ls = document.getElementById('loginScreen');
+  if (u){
+    ls.style.display = 'none';
+    startData();
+  } else {
+    if (unsubData){ unsubData(); unsubData = null; }
+    S = null; USER = '';
+    document.getElementById('app').innerHTML = '<div class="card empty">נדרשת התחברות</div>';
+    ls.style.display = 'flex';
+  }
+});
+function startData(){
+  if (unsubData) return;
+  unsubData = DOC.onSnapshot(snap => {
   setConn(true);
   if (!snap.exists) {
     S = JSON.parse(JSON.stringify(SEED));
@@ -261,14 +373,19 @@ DOC.onSnapshot(snap => {
   }
   if (!reportProj) { const p = S.projects.find(x=>x.active); reportProj = p?p.id:''; }
   if (snap.exists && !snap.metadata.hasPendingWrites) serverState = JSON.stringify(S);
+  bindUserFromAuth();
   render();
-  if (!READONLY && !USER && !document.querySelector('.modal-overlay')) showUserModal();
+  if (!READONLY && authUser && !USER){
+    if (!S.team.some(t => t.email)){ if (!document.querySelector('.modal-overlay')) showBootstrapModal(); }
+    else if (!window._unassignedWarned){ window._unassignedWarned = true; toastMsg('האימייל שלכם לא משויך לאיש צוות — פנו למנהל'); }
+  }
 }, err => { console.error(err); setConn(false);
   const why = (err && err.code === 'permission-denied')
     ? 'חוקי Firestore חוסמים גישה.<br><b>הפתרון:</b> Firebase ← Firestore ← Rules ← לפרסם את החוק של vas/{docId}'
     : 'בדקו חיבור אינטרנט';
   document.getElementById('app').innerHTML = '<div class="card empty">❌ אין חיבור למסד הנתונים.<br>'+why+'</div>';
-});
+  });
+}
 let serverState = null;
 
 function persist(){
@@ -974,9 +1091,13 @@ function renderSettings(){
     <div class="card">
       <div class="card-title">משתמש נוכחי</div>
       <div class="settings-row" style="cursor:default">
-        <div><div class="settings-name">${esc(USER||'לא נבחר')}</div>
-        <div class="settings-sub">${USER?(isAdmin()?'מנהל — הרשאות מלאות':'הרשאות עדכון בלבד (ללא מחיקה)'):'יש לבחור משתמש'}</div></div>
-        <button class="btn-mini" onclick="switchUser()">החלפה</button>
+        <div><div class="settings-name">${esc(USER||'לא משויך')}</div>
+        <div class="settings-sub" dir="ltr" style="text-align:right">${authUser?esc(authUser.email):''}</div>
+        <div class="settings-sub">${USER?(isAdmin()?'מנהל — הרשאות מלאות':'הרשאות עדכון בלבד (ללא מחיקה)'):'האימייל לא משויך לאיש צוות'}</div></div>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          <button class="btn-mini" style="background:#3B6EA5" onclick="changeMyPassword()">🔑 סיסמה</button>
+          <button class="btn-mini" style="background:#8A8F9C" onclick="doLogout()">יציאה</button>
+        </div>
       </div>
     </div>
     <div class="card">
@@ -995,7 +1116,7 @@ function renderSettings(){
         ${S.team.filter(m=>m.kind===kind).map(m=>`
           <div class="settings-row" onclick="openMemberForm('${m.id}')">
             <div><div class="settings-name">${esc(m.name)}</div>
-            <div class="settings-sub">${esc(m.role)}</div></div>
+            <div class="settings-sub">${esc(m.role)}${m.email?` · 🔑 יש כניסה`:''}</div></div>
           </div>`).join('')}`).join('')}
     </div>
     <div class="card">
@@ -1070,10 +1191,12 @@ function openMemberForm(id){
   modalShell(m?'עריכת איש צוות':'איש צוות חדש', `
     <label>שם *</label><input id="mf_name" value="${esc(f.name)}">
     <label>תפקיד</label><input id="mf_role" value="${esc(f.role)}">
+    <label>אימייל כניסה</label><input id="mf_email" value="${esc(f.email||'')}" inputmode="email" dir="ltr" placeholder="igor@vas-sec.co.il">
     <label>סוג</label>
     <select id="mf_kind"><option value="עובד"${f.kind==='עובד'?' selected':''}>עובד</option><option value="קבלן"${f.kind==='קבלן'?' selected':''}>קבלן משנה</option></select>
     <div class="form-actions">
       ${(m&&isAdmin())?`<button class="btn-danger" onclick="deleteMember('${m.id}')">מחיקה</button>`:''}
+      ${(m&&isAdmin())?`<button class="btn-secondary" style="flex:0 0 auto" onclick="createLogin('${m.id}')">🔑 צור כניסה</button>`:''}
       <button class="btn-primary" onclick="saveMember('${m?m.id:''}')">שמירה</button>
     </div>`);
 }
@@ -1083,6 +1206,7 @@ async function saveMember(id){
   const m = id ? S.team.find(x=>x.id===id) : { id: uid() };
   m.name = name;
   m.role = document.getElementById('mf_role').value.trim();
+  m.email = (document.getElementById('mf_email')||{value:''}).value.trim();
   m.kind = document.getElementById('mf_kind').value;
   if (!id) S.team.push(m);
   await persist(); closeModal(); render(); toastMsg('איש הצוות נשמר ✓');
