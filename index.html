@@ -180,6 +180,7 @@ main { padding: 14px 14px 20px; max-width: 760px; margin: 0 auto; }
     <input id="li_pass" type="password" autocomplete="current-password" dir="ltr" onkeydown="if(event.key==='Enter')doLogin()">
     <div class="login-err" id="li_err"></div>
     <button class="btn-primary" style="width:100%" onclick="doLogin()">התחברות</button>
+    <div style="margin-top:12px"><a href="#" onclick="forgotPassword();return false" style="font-size:13px;color:#3B6EA5;font-weight:600">שכחתי סיסמה</a></div>
   </div>
 </div>
 <div id="modalRoot"></div>
@@ -288,6 +289,18 @@ function doLogin(){
   });
 }
 function doLogout(){ if (confirm('להתנתק מהמערכת?')) auth.signOut(); }
+function forgotPassword(){
+  const em = document.getElementById('li_email').value.trim();
+  const errEl = document.getElementById('li_err');
+  if (!em){ errEl.style.color = '#D64545'; errEl.textContent = 'הזינו אימייל למעלה ואז לחצו "שכחתי סיסמה"'; return; }
+  auth.sendPasswordResetEmail(em).then(() => {
+    errEl.style.color = '#3E8E5A';
+    errEl.textContent = 'נשלח מייל לאיפוס סיסמה ל-' + em + ' — בדקו גם בספאם';
+  }).catch(e => {
+    errEl.style.color = '#D64545';
+    errEl.textContent = e.code === 'auth/user-not-found' ? 'האימייל לא רשום במערכת' : e.code === 'auth/invalid-email' ? 'כתובת אימייל לא תקינה' : 'שגיאה: ' + (e.code || '');
+  });
+}
 function bindUserFromAuth(){
   if (!authUser || !S){ return; }
   const em = (authUser.email || '').toLowerCase();
