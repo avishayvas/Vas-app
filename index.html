@@ -125,6 +125,7 @@ main { padding: 14px 14px 20px; max-width: 760px; margin: 0 auto; }
 .photo-overlay img { max-width: 94vw; max-height: 80vh; border-radius: 10px; }
 .photo-overlay div { color: #fff; font-weight: 700; cursor: pointer; }
 
+.help-q { display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; border-radius:50%; border:1.5px solid #C9962E; background:#FBF7EE; color:#C9962E; font-weight:800; font-size:12px; cursor:pointer; padding:0; line-height:1; flex-shrink:0; margin-inline-start:6px; vertical-align:middle; }
 .login-screen { position: fixed; inset: 0; background: #1B1F2A; z-index: 100; display: none; align-items: center; justify-content: center; padding: 20px; }
 .login-box { background: #fff; border-radius: 16px; padding: 26px 22px; width: 100%; max-width: 380px; text-align: center; }
 .login-box label { display: block; text-align: right; font-size: 12.5px; font-weight: 700; color: #555B69; margin: 12px 0 4px; }
@@ -184,6 +185,7 @@ main { padding: 14px 14px 20px; max-width: 760px; margin: 0 auto; }
   </div>
 </div>
 <div id="modalRoot"></div>
+<div id="helpRoot"></div>
 
 <script>
 /* ==================== Firebase ==================== */
@@ -289,6 +291,33 @@ function doLogin(){
   });
 }
 function doLogout(){ if (confirm('להתנתק מהמערכת?')) auth.signOut(); }
+const HELP = {
+  tasks: { t:'איך עובד מסך המשימות', b:'<b>עדכון סטטוס:</b> לוחצים על התגית הצבעונית (פתוח / בטיפול / בוצע / אושר) והיא מתקדמת לשלב הבא. במעבר ל"בוצע" ייפתח חלון דיווח ביצוע.<br><br><b>עריכה:</b> לחיצה על שם המשימה פותחת את כל הפרטים לעריכה.<br><br><b>הפס הצבעוני בצד:</b> רמת הדחיפות — אדום דחוף, כתום גבוה, כחול רגיל.<br><br><b>🙋 בקשה למשוך אליי:</b> רוצים לקחת משימה שלא משובצת אליכם? לוחצים, ומנהל מאשר או דוחה.' },
+  calls: { t:'איך עובדות קריאות שירות', b:'קריאת שירות היא תקלה אצל לקוח — נפרדת ממשימות הפרויקטים.<br><br><b>סטטוסים:</b> חדשה ← שובצה ← בטיפול ← נסגרה (לחיצה על התגית מקדמת). בסגירה יתבקש דיווח ביצוע.<br><br><b>📞 טלפון:</b> לחיצה על המספר מחייגת ישירות.<br><br><b>בחירה מהירה:</b> בטופס יש רשימה של כל סניפי מקס סטוק והפרויקטים — בחירת סניף ממלאת אוטומטית גם את טלפון מנהל הסניף.' },
+  claim: { t:'בקשות משיכה', b:'טכנאי שרוצה לקחת אליו משימה או קריאה לוחץ "🙋 בקשה למשוך אליי".<br><br>הבקשה מופיעה כאן אצל המנהלים — <b>אישור</b> משבץ את המשימה אליו, <b>דחייה</b> מבטלת את הבקשה.<br><br>ככה אף אחד לא לוקח עבודה בלי שהמנהל יודע.' },
+  upsell: { t:'מכירה נוספת / ליד', b:'מכרתם משהו ללקוח במהלך עבודה? זיהיתם הזדמנות לעבודה נוספת? <b>תמיד רושמים כאן</b> — זה הבסיס לתגמול שלכם.<br><br><b>סוגים:</b><br>• <b>מוצר</b> — מכרתם ציוד במקום (מפצל, כבל, מתאם)<br>• <b>עבודה קטנה</b> — תוספת שביצעתם (מצלמה נוספת, נקודה)<br>• <b>ליד לעבודה גדולה</b> — זיהיתם צורך גדול; לא סוגרים מחיר בשטח! אומרים ללקוח שהמנהל יחזור עם הצעה, ורושמים כאן<br><br>המנהל רואה הכל בדשבורד ומסמן "תוגמל" אחרי התשלום. גובה התגמול — לפי סיכום עם המנהל.' },
+  report: { t:'דיווח ביצוע', b:'כאן רושמים <b>מה בוצע בפועל</b> — בשפה פשוטה: "הותקנו 12 נקודות בקומה 3", "הוחלף גלאי בגרעין ב\'".<br><br>ובשדה הכמות: מספרים — "12 נקודות", "3 מצלמות".<br><br><b>למה זה חשוב:</b> הדיווח מופיע על הכרטיס, נכנס לדוח היומי שנשלח ללקוחות ולמנהלים, ומשמש בסוף חודש מול קבלנים וחשבונות. דיווח טוב = פחות ויכוחים.' },
+  media: { t:'תמונות וסרטונים', b:'עד 4 קבצים לכל משימה/קריאה — תמונות או סרטונים (סרטון עד 8MB, כ-30 שניות).<br><br><b>מה לצלם:</b> לפני העבודה, אחרי העבודה, וכל ליקוי שמצאתם. התמונות נשמרות בענן וכל הצוות רואה אותן.<br><br>תיעוד טוב מגן עליכם ועל החברה מול לקוחות ומפקחים.' },
+  location: { t:'שדה המיקום', b:'רושמים איפה בדיוק העבודה: קומה, גרעין, אזור — לדוגמה "קומה 12 · גרעין ב\'".<br><br><b>טיפ:</b> אם הפרויקט שנבחר הוא מקס סטוק — השדה הופך אוטומטית לרשימת כל הסניפים.' },
+  daily: { t:'הדוח היומי', b:'בוחרים תאריך ומקבלים תמונה מלאה של היום:<br><br>• <b>✅ בוצע היום</b> — כל מה שנסגר, כולל דיווחי הביצוע והכמויות<br>• <b>⏳ נותר לביצוע</b> — כל הפתוח, לפי פרויקט, עם סימון ⚠️ למאחרות<br>• <b>💰 מכירות</b> שנרשמו היום<br><br>אפשר להעתיק או לשלוח ישירות בוואטסאפ — מעולה לעדכון ערב למנהלים או ללקוח.' },
+  backup: { t:'גיבוי ושחזור', b:'<b>⬇️ ייצוא גיבוי:</b> מוריד קובץ עם כל הנתונים (בלי תמונות). מומלץ פעם בחודש.<br><br><b>↩️ שחזור אחרון (מנהלים):</b> מחזיר את המערכת למצב שלפני השינוי האחרון — הצלה מהירה אם מישהו דרס משהו בטעות.<br><br><b>⬆️ שחזור מגיבוי (מנהלים):</b> טוען קובץ גיבוי שהורדתם בעבר.' },
+  viewlink: { t:'קישור צפייה בלבד', b:'קישור מיוחד לשיתוף עם לקוח או מפקח — הם רואים את כל המשימות והסטטוסים אבל <b>לא יכולים לערוך כלום</b>.<br><br>שימו לב: מרגע שחוקי האבטחה מופעלים, גם צפייה דורשת חשבון — אפשר ליצור משתמש "צופה" ייעודי לזה.' },
+  log: { t:'יומן הפעילות', b:'כל פעולה במערכת נרשמת אוטומטית: מי, מה ומתי — פתיחת משימות, עדכוני סטטוס, מחיקות, מכירות, שיוכים.<br><br>גלוי למנהלים בלבד. אי אפשר למחוק או לערוך אותו.' },
+  team: { t:'ניהול צוות וכניסות', b:'<b>הוספת עובד:</b> ＋ הוספה ← שם ותפקיד.<br><br><b>יצירת כניסה עם סיסמה:</b> לוחצים על העובד ← מזינים את האימייל האישי שלו (עדיף אמיתי, בשביל שחזור סיסמה) ← "🔑 צור כניסה" ← קובעים סיסמה ראשונית ← שולחים לו את הפרטים בוואטסאפ.<br><br>🔑 ליד שם = יש לו כניסה פעילה.<br><br><b>חסימת עובד:</b> דרך Firebase ← Authentication ← Users ← Disable.' },
+  perms: { t:'הרשאות במערכת', b:'<b>מנהלים</b> (אבישי, ליאל, הילה): הכל — כולל מחיקה, אישור בקשות, ניהול צוות ופרויקטים, גיבויים ויומן.<br><br><b>טכנאים וקבלנים:</b> פותחים ומעדכנים משימות וקריאות, מעלים תמונות, מדווחים ביצוע ומכירות, מבקשים למשוך — <b>אבל לא מוחקים כלום</b>.<br><br>הזיהוי לפי האימייל שאיתו נכנסתם — כל פעולה על שמכם.' }
+};
+function helpBtn(key){ return `<button class="help-q" onclick="event.preventDefault();event.stopPropagation();showHelp('${key}')">?</button>`; }
+function showHelp(key){
+  const h = HELP[key]; if (!h) return;
+  document.getElementById('helpRoot').innerHTML = `
+    <div class="modal-overlay" style="z-index:85" onclick="if(event.target===this)closeHelp()">
+      <div class="modal" style="max-width:480px">
+        <div class="modal-header"><div>❓ ${h.t}</div><button onclick="closeHelp()">✕</button></div>
+        <div class="modal-body" style="font-size:14.5px;line-height:1.75;color:#333A47">${h.b}</div>
+      </div>
+    </div>`;
+}
+function closeHelp(){ document.getElementById('helpRoot').innerHTML = ''; }
 function forgotPassword(){
   const em = document.getElementById('li_email').value.trim();
   const errEl = document.getElementById('li_err');
@@ -586,7 +615,7 @@ function renderHome(){
     ${(()=>{ if(!isAdmin()) return '';
       const reqs = [...S.tasks.filter(t=>t.claimReq).map(t=>({x:t,kind:'task',label:t.title})), ...S.calls.filter(c=>c.claimReq).map(c=>({x:c,kind:'call',label:c.customer}))];
       if(!reqs.length) return '';
-      return `<div class="card"><div class="card-title" style="color:#C9962E">🙋 בקשות ממתינות לאישורך</div>` + reqs.map(r=>`
+      return `<div class="card"><div class="card-title" style="color:#C9962E">🙋 בקשות ממתינות לאישורך ${helpBtn('claim')}</div>` + reqs.map(r=>`
         <div class="mini-task" style="cursor:default"><span class="dot" style="background:#C9962E"></span>
         <div style="flex:1"><div class="mini-task-title">${esc(r.x.claimReq.by)} מבקש: ${esc(r.label)}</div>
         <div class="claim-row" style="margin-top:6px;border:none;background:none;padding:0">
@@ -599,7 +628,7 @@ function renderHome(){
       if(!ups.length) return '';
       const pending = ups.filter(u=>!u.paid).length;
       ups.sort((a,b)=>(a.paid===b.paid ? (b.d||'').localeCompare(a.d||'') : (a.paid?1:-1)));
-      return `<div class="card"><div class="card-title" style="color:#3E8E5A">💰 מכירות ולידים לתגמול${pending?` — ${pending} ממתינות`:' — הכל תוגמל ✓'}</div>` + ups.slice(0,6).map(u=>`
+      return `<div class="card"><div class="card-title" style="color:#3E8E5A">💰 מכירות ולידים לתגמול${pending?` — ${pending} ממתינות`:' — הכל תוגמל ✓'} ${helpBtn('upsell')}</div>` + ups.slice(0,6).map(u=>`
         <div class="mini-task" style="cursor:default;${u.paid?'opacity:.5':''}"><span class="dot" style="background:${u.paid?'#8A8F9C':'#3E8E5A'}"></span>
         <div style="flex:1"><div class="mini-task-title">${u.type?`[${esc(u.type)}] `:''}${esc(u.what)}${u.amt?` — ${u.amt.toLocaleString()} ₪`:''}</div>
         <div class="mini-task-sub">${esc(u.who)} · ${fmtDate(u.d||'')}</div></div>
@@ -632,7 +661,8 @@ function filteredTasks(){
 function renderTasks(){
   const list = filteredTasks();
   return `
-    <div class="filter-row">
+    <div class="filter-row" style="align-items:center">
+      ${helpBtn('tasks')}
       <select onchange="setFilter('proj',this.value)">
         <option value="all"${filters.proj==='all'?' selected':''}>כל הפרויקטים</option>
         ${S.projects.filter(p=>p.active).map(p=>`<option value="${p.id}"${filters.proj===p.id?' selected':''}>${esc(p.name)}</option>`).join('')}
@@ -700,7 +730,7 @@ function openTaskForm(id){
     <select id="tf_proj" onchange="tfRenderLoc()">${S.projects.filter(p=>p.active).map(p=>`<option value="${p.id}"${f.projectId===p.id?' selected':''}>${esc(p.name)}</option>`).join('')}</select>
     <label>תיאור המשימה / הליקוי *</label>
     <input id="tf_title" value="${esc(f.title)}" placeholder="לדוגמה: השחלת CAT-6A גרעין א׳ קומות 5–8">
-    <label>מיקום (קומה / גרעין / אזור / סניף)</label>
+    <label>מיקום (קומה / גרעין / אזור / סניף) ${helpBtn('location')}</label>
     <div id="tf_locwrap"><input id="tf_loc" value="${esc(f.location)}" placeholder="קומה 12 · גרעין ב׳"></div>
     <div class="form-2col">
       <div><label>דיסציפלינה</label>
@@ -721,10 +751,10 @@ function openTaskForm(id){
     <label style="color:#3B6EA5">🔧 דיווח ביצוע — מה בוצע בפועל</label>
     <textarea id="tf_done" rows="2" placeholder="לדוגמה: הותקנו נקודות תקשורת בקומה 5, בוצעו בדיקות Fluke">${esc(f.doneDesc||'')}</textarea>
     <input id="tf_doneqty" value="${esc(f.doneQty||'')}" placeholder="כמויות: 12 נק׳ · 3 גלאים · 40 מ׳ כבל" style="margin-top:8px">
-    <label style="color:#3B6EA5">🛠️ דיווח ביצוע — מה בוצע בפועל</label>
+    <label style="color:#3B6EA5">🛠️ דיווח ביצוע — מה בוצע בפועל ${helpBtn('report')}</label>
     <textarea id="tf_report" rows="2" placeholder="לדוגמה: הותקנו נקודות בקומה 3, בוצעו בדיקות Fluke">${esc(f.report||'')}</textarea>
     <input id="tf_qty" value="${esc(f.qty||'')}" placeholder="כמות — לדוגמה: 12 נקודות / 3 מצלמות" style="margin-top:8px">
-    <label style="color:#3E8E5A">💰 מכירה נוספת / ליד (לתיעוד לצורך תגמול)</label>
+    <label style="color:#3E8E5A">💰 מכירה נוספת / ליד (לתיעוד לצורך תגמול) ${helpBtn('upsell')}</label>
     <input id="tf_upsell" value="${esc(f.upsell||'')}" placeholder="מה נמכר או זוהה? לדוגמה: מפצל HDMI / הרחבת מצלמות">
     <div class="form-2col" style="margin-top:8px">
       <div><select id="tf_upstype">
@@ -735,7 +765,7 @@ function openTaskForm(id){
       </select></div>
       <div><input id="tf_upsellamt" value="${esc(f.upsellAmt||'')}" inputmode="decimal" placeholder="סכום משוער ב-₪"></div>
     </div>
-    <label>תמונות / סרטונים (עד 4)</label>
+    <label>תמונות / סרטונים (עד 4) ${helpBtn('media')}</label>
     <div class="photo-row" id="tf_photos"></div>
     <input id="tf_file" type="file" accept="image/*,video/*" style="display:none">
     <div class="form-actions">
@@ -818,7 +848,7 @@ async function deleteTask(id){
 function renderCalls(){
   const list = S.calls.filter(c=>callsShowClosed || c.status!=='נסגרה');
   return `
-    <label class="toggle-row"><input type="checkbox" ${callsShowClosed?'checked':''} onchange="callsShowClosed=this.checked;render()"> הצג גם קריאות סגורות</label>
+    <label class="toggle-row"><input type="checkbox" ${callsShowClosed?'checked':''} onchange="callsShowClosed=this.checked;render()"> הצג גם קריאות סגורות ${helpBtn('calls')}</label>
     ${list.length===0 ? '<div class="card empty">אין קריאות שירות</div>' : list.map(c=>`
       <div class="task-card" style="border-inline-start-color:${URGENCY_COLORS[c.urgency]||'#8A8F9C'}">
         <div class="task-top">
@@ -884,10 +914,10 @@ function openCallForm(id){
     <label style="color:#3B6EA5">🔧 דיווח ביצוע — מה בוצע בפועל</label>
     <textarea id="tf_done" rows="2" placeholder="לדוגמה: הותקנו נקודות תקשורת בקומה 5, בוצעו בדיקות Fluke">${esc(f.doneDesc||'')}</textarea>
     <input id="tf_doneqty" value="${esc(f.doneQty||'')}" placeholder="כמויות: 12 נק׳ · 3 גלאים · 40 מ׳ כבל" style="margin-top:8px">
-    <label style="color:#3B6EA5">🛠️ דיווח ביצוע — מה בוצע בפועל</label>
+    <label style="color:#3B6EA5">🛠️ דיווח ביצוע — מה בוצע בפועל ${helpBtn('report')}</label>
     <textarea id="tf_report" rows="2" placeholder="לדוגמה: הותקנו נקודות בקומה 3, בוצעו בדיקות Fluke">${esc(f.report||'')}</textarea>
     <input id="tf_qty" value="${esc(f.qty||'')}" placeholder="כמות — לדוגמה: 12 נקודות / 3 מצלמות" style="margin-top:8px">
-    <label style="color:#3E8E5A">💰 מכירה נוספת / ליד (לתיעוד לצורך תגמול)</label>
+    <label style="color:#3E8E5A">💰 מכירה נוספת / ליד (לתיעוד לצורך תגמול) ${helpBtn('upsell')}</label>
     <input id="tf_upsell" value="${esc(f.upsell||'')}" placeholder="מה נמכר או זוהה? לדוגמה: מפצל HDMI / הרחבת מצלמות">
     <div class="form-2col" style="margin-top:8px">
       <div><select id="tf_upstype">
@@ -898,7 +928,7 @@ function openCallForm(id){
       </select></div>
       <div><input id="tf_upsellamt" value="${esc(f.upsellAmt||'')}" inputmode="decimal" placeholder="סכום משוער ב-₪"></div>
     </div>
-    <label>תמונות / סרטונים (עד 4)</label>
+    <label>תמונות / סרטונים (עד 4) ${helpBtn('media')}</label>
     <div class="photo-row" id="tf_photos"></div>
     <input id="tf_file" type="file" accept="image/*,video/*" style="display:none">
     <div class="form-actions">
@@ -1056,7 +1086,7 @@ function renderReports(){
   const persRep = reportPerson ? buildPersonReport(reportPerson) : '';
   return `
     <div class="card">
-      <div class="card-title">📅 דוח יומי — בוצע / נותר לביצוע</div>
+      <div class="card-title">📅 דוח יומי — בוצע / נותר לביצוע ${helpBtn('daily')}</div>
       <input type="date" value="${esc(reportDate)}" onchange="reportDate=this.value;render()">
       <pre class="report-preview">${esc(dailyRep)}</pre>
       <div class="form-actions">
@@ -1102,7 +1132,7 @@ function waReport(kind){
 function renderSettings(){
   return `
     <div class="card">
-      <div class="card-title">משתמש נוכחי</div>
+      <div class="card-title">משתמש נוכחי ${helpBtn('perms')}</div>
       <div class="settings-row" style="cursor:default">
         <div><div class="settings-name">${esc(USER||'לא משויך')}</div>
         <div class="settings-sub" dir="ltr" style="text-align:right">${authUser?esc(authUser.email):''}</div>
@@ -1123,7 +1153,7 @@ function renderSettings(){
         </div>`).join('')}
     </div>
     <div class="card">
-      <div class="card-title">צוות ${(!READONLY&&isAdmin())?'<button class="btn-mini" onclick="openMemberForm()">＋ הוספה</button>':''}</div>
+      <div class="card-title"><span>צוות ${helpBtn('team')}</span> ${(!READONLY&&isAdmin())?'<button class="btn-mini" onclick="openMemberForm()">＋ הוספה</button>':''}</div>
       ${['עובד','קבלן'].map(kind=>`
         <div class="team-kind">${kind==='עובד'?'עובדים':'קבלני משנה'}</div>
         ${S.team.filter(m=>m.kind===kind).map(m=>`
@@ -1133,7 +1163,7 @@ function renderSettings(){
           </div>`).join('')}`).join('')}
     </div>
     <div class="card">
-      <div class="card-title">גיבוי ושחזור</div>
+      <div class="card-title">גיבוי ושחזור ${helpBtn('backup')}</div>
       <div class="form-actions" style="margin-top:4px">
         <button class="btn-secondary" onclick="exportBackup()">⬇️ ייצוא גיבוי</button>
         ${isAdmin()?'<button class="btn-secondary" onclick="restoreBackup()">↩️ שחזור אחרון</button>':''}
@@ -1144,7 +1174,7 @@ function renderSettings(){
     </div>
     ${isAdmin()?`
     <div class="card">
-      <div class="card-title">📜 יומן פעילות (15 אחרונות)</div>
+      <div class="card-title">📜 יומן פעילות (15 אחרונות) ${helpBtn('log')}</div>
       ${(S.log||[]).slice(0,15).map(l=>`
         <div class="settings-row" style="cursor:default">
           <div><div class="settings-sub">${esc(l.d)} · ${esc(l.u)}</div>
@@ -1152,7 +1182,7 @@ function renderSettings(){
         </div>`).join('') || '<div class="empty">אין פעילות עדיין</div>'}
     </div>`:''}
     <div class="card">
-      <div class="card-title">קישור צפייה בלבד</div>
+      <div class="card-title">קישור צפייה בלבד ${helpBtn('viewlink')}</div>
       <div class="settings-sub">שיתוף עם לקוח או מפקח — רואים הכל, לא עורכים כלום:</div>
       <div class="form-actions" style="margin-top:10px">
         <button class="btn-secondary" onclick="copyViewLink()">📋 העתקת קישור צפייה</button>
