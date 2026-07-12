@@ -9,13 +9,14 @@
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800;900&display=swap');
 * { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { max-width: 100%; overflow-x: hidden; }
 body { font-family: 'Heebo', sans-serif; background: #1B1F2A; min-height: 100vh; display: flex; align-items: flex-start; justify-content: center; padding: 24px 16px; }
 .box { background: #F5F3ED; border-radius: 18px; padding: 26px 22px; width: 100%; max-width: 460px; }
 .brand { font-weight: 900; font-size: 26px; letter-spacing: 1px; color: #C9962E; text-align: center; }
 .brand span { color: #1B1F2A; font-weight: 300; font-size: 17px; letter-spacing: 3px; }
 .sub { text-align: center; font-size: 14px; color: #555B69; margin: 4px 0 20px; font-weight: 500; }
 label { display: block; font-size: 13px; font-weight: 700; color: #555B69; margin: 14px 0 5px; }
-input, select, textarea { width: 100%; padding: 12px; border: 1.5px solid #DDD9CC; border-radius: 10px; font-family: inherit; font-size: 15px; background: #fff; }
+input, select, textarea { width: 100%; padding: 13px; border: 1.5px solid #DDD9CC; border-radius: 10px; font-family: inherit; font-size: 16px; background: #fff; }
 input:focus, select:focus, textarea:focus { outline: 2px solid #C9962E; border-color: #C9962E; }
 .urg-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .urg-btn { padding: 11px 4px; border-radius: 10px; border: 1.5px solid #DDD9CC; background: #fff; font-family: inherit; font-weight: 700; font-size: 13.5px; cursor: pointer; }
@@ -28,7 +29,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid #C9962E; border-c
 .done .big { font-size: 52px; }
 .done h2 { margin: 12px 0 8px; color: #1B1F2A; }
 .done p { color: #555B69; font-size: 15px; line-height: 1.6; }
-.hp { position: absolute; opacity: 0; height: 0; overflow: hidden; }
+.hp { position: fixed; top: -9999px; left: -9999px; width: 1px; height: 1px; opacity: 0; }
 </style>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -127,7 +128,7 @@ async function send(){
     document.getElementById('done').style.display = 'block';
   } catch(e){
     console.error(e);
-    err.textContent = 'שגיאה בשליחה — בדקו חיבור אינטרנט ונסו שוב';
+    err.textContent = e.code === 'permission-denied' ? 'המערכת עדיין לא פתוחה לקבלת קריאות (הרשאות)' : 'שגיאה בשליחה — בדקו חיבור אינטרנט ונסו שוב';
     btn.disabled = false; btn.textContent = 'שליחת הקריאה 📤';
   }
 }
