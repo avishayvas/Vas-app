@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#1B1F2A">
+<title>VAS Security · פתיחת קריאת שירות</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%231B1F2A'/><text x='50' y='68' font-size='48' font-weight='900' text-anchor='middle' fill='%23C9962E' font-family='Arial'>V</text></svg>">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800;900&display=swap');
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Heebo', sans-serif; background: #1B1F2A; min-height: 100vh; display: flex; align-items: flex-start; justify-content: center; padding: 24px 16px; }
+.box { background: #F5F3ED; border-radius: 18px; padding: 26px 22px; width: 100%; max-width: 460px; }
+.brand { font-weight: 900; font-size: 26px; letter-spacing: 1px; color: #C9962E; text-align: center; }
+.brand span { color: #1B1F2A; font-weight: 300; font-size: 17px; letter-spacing: 3px; }
+.sub { text-align: center; font-size: 14px; color: #555B69; margin: 4px 0 20px; font-weight: 500; }
+label { display: block; font-size: 13px; font-weight: 700; color: #555B69; margin: 14px 0 5px; }
+input, select, textarea { width: 100%; padding: 12px; border: 1.5px solid #DDD9CC; border-radius: 10px; font-family: inherit; font-size: 15px; background: #fff; }
+input:focus, select:focus, textarea:focus { outline: 2px solid #C9962E; border-color: #C9962E; }
+.urg-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.urg-btn { padding: 11px 4px; border-radius: 10px; border: 1.5px solid #DDD9CC; background: #fff; font-family: inherit; font-weight: 700; font-size: 13.5px; cursor: pointer; }
+.urg-btn.sel { border-color: #1B1F2A; background: #1B1F2A; color: #fff; }
+.urg-btn.sel.hot { background: #D64545; border-color: #D64545; }
+.submit { width: 100%; margin-top: 22px; background: #C9962E; color: #fff; border: none; border-radius: 12px; padding: 15px; font-family: inherit; font-weight: 800; font-size: 17px; cursor: pointer; }
+.submit:disabled { opacity: .5; }
+.err { color: #D64545; font-size: 13.5px; font-weight: 600; margin-top: 10px; min-height: 18px; text-align: center; }
+.done { text-align: center; padding: 30px 10px; display: none; }
+.done .big { font-size: 52px; }
+.done h2 { margin: 12px 0 8px; color: #1B1F2A; }
+.done p { color: #555B69; font-size: 15px; line-height: 1.6; }
+.hp { position: absolute; opacity: 0; height: 0; overflow: hidden; }
+</style>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+</head>
+<body>
+<div class="box">
+  <div class="brand">VAS <span>SECURITY</span></div>
+  <div class="sub">פתיחת קריאת שירות · ש.ו טכנולוגיות ביטחון</div>
+
+  <div id="form">
+    <label>שם מלא *</label>
+    <input id="f_name" placeholder="ישראל ישראלי">
+
+    <label>טלפון *</label>
+    <input id="f_phone" inputmode="tel" placeholder="050-0000000">
+
+    <label>אתר / סניף / כתובת *</label>
+    <input id="f_site" placeholder="מקס סטוק חולון / שם האתר">
+
+    <label>נושא התקלה *</label>
+    <select id="f_topic">
+      <option value="">— בחרו נושא —</option>
+      <option>מצלמות אבטחה</option>
+      <option>אזעקה / פריצה</option>
+      <option>בקרת כניסה / דלתות</option>
+      <option>אינטרקום</option>
+      <option>גילוי אש</option>
+      <option>תקשורת / אינטרנט</option>
+      <option>כריזה</option>
+      <option>אחר</option>
+    </select>
+
+    <label>רמת דחיפות *</label>
+    <div class="urg-row" id="urgRow">
+      <button type="button" class="urg-btn hot" data-v="דחוף">🔴 דחוף</button>
+      <button type="button" class="urg-btn" data-v="גבוה">גבוה</button>
+      <button type="button" class="urg-btn" data-v="בינוני">בינוני</button>
+      <button type="button" class="urg-btn sel" data-v="רגיל">רגיל</button>
+    </div>
+
+    <label>תיאור התקלה *</label>
+    <textarea id="f_desc" rows="3" placeholder="תארו בקצרה מה קרה, איפה, וממתי"></textarea>
+
+    <input class="hp" id="f_company" tabindex="-1" autocomplete="off">
+
+    <div class="err" id="f_err"></div>
+    <button class="submit" id="f_send" onclick="send()">שליחת הקריאה 📤</button>
+  </div>
+
+  <div class="done" id="done">
+    <div class="big">✅</div>
+    <h2>הקריאה נקלטה!</h2>
+    <p>הצוות שלנו קיבל את הפנייה<br>וניצור קשר בהקדם לתיאום טיפול.<br><br><b>VAS Security · ש.ו טכנולוגיות ביטחון</b></p>
+  </div>
+</div>
+
+<script>
+firebase.initializeApp({
+  apiKey: "AIzaSyD0_Ji35W2rlaqYjYRqAU-sTksZm0CRDaY",
+  authDomain: "vas-schedule.firebaseapp.com",
+  projectId: "vas-schedule",
+  storageBucket: "vas-schedule.firebasestorage.app",
+  messagingSenderId: "763095300879",
+  appId: "1:763095300879:web:7d42c00f856ba8fd365c7a"
+});
+const db = firebase.firestore();
+let urgency = 'רגיל';
+document.querySelectorAll('.urg-btn').forEach(b => {
+  b.onclick = () => {
+    document.querySelectorAll('.urg-btn').forEach(x => x.classList.remove('sel'));
+    b.classList.add('sel');
+    urgency = b.dataset.v;
+  };
+});
+async function send(){
+  const err = document.getElementById('f_err');
+  err.textContent = '';
+  const name = document.getElementById('f_name').value.trim();
+  const phone = document.getElementById('f_phone').value.trim();
+  const site = document.getElementById('f_site').value.trim();
+  const topic = document.getElementById('f_topic').value;
+  const desc = document.getElementById('f_desc').value.trim();
+  if (document.getElementById('f_company').value) return; /* honeypot */
+  if (!name || !phone || !site || !topic || !desc){
+    err.textContent = 'נא למלא את כל השדות המסומנים ב-*';
+    return;
+  }
+  const btn = document.getElementById('f_send');
+  btn.disabled = true; btn.textContent = 'שולח…';
+  try {
+    await db.collection('vas_intake').add({
+      name, phone, site, topic, desc, urgency,
+      at: new Date().toISOString()
+    });
+    document.getElementById('form').style.display = 'none';
+    document.getElementById('done').style.display = 'block';
+  } catch(e){
+    console.error(e);
+    err.textContent = 'שגיאה בשליחה — בדקו חיבור אינטרנט ונסו שוב';
+    btn.disabled = false; btn.textContent = 'שליחת הקריאה 📤';
+  }
+}
+</script>
+</body>
+</html>
