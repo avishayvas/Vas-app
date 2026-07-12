@@ -1,4 +1,4 @@
-const CACHE = 'vas-app-v4';
+const CACHE = 'vas-app-v5';
 const SHELL = ['/Vas-app/', '/Vas-app/index.html', '/Vas-app/manifest.json', '/Vas-app/icon-192.png', '/Vas-app/icon-180.png', '/Vas-app/icon-512.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
