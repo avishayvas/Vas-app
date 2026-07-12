@@ -253,7 +253,7 @@ const SEED = {
 /* ==================== State ==================== */
 let S = null;
 let tab = 'home';
-let filters = { proj:'all', status:'open', assignee:'all' };
+let filters = { proj:'all', status:'open', assignee:'all', special:null };
 let callsShowClosed = false;
 let reportProj = '', reportPerson = '', reportDate = '';
 const photoCache = {};
@@ -303,9 +303,82 @@ const HELP = {
   backup: { t:'גיבוי ושחזור', b:'<b>⬇️ ייצוא גיבוי:</b> מוריד קובץ עם כל הנתונים (בלי תמונות). מומלץ פעם בחודש.<br><br><b>↩️ שחזור אחרון (מנהלים):</b> מחזיר את המערכת למצב שלפני השינוי האחרון — הצלה מהירה אם מישהו דרס משהו בטעות.<br><br><b>⬆️ שחזור מגיבוי (מנהלים):</b> טוען קובץ גיבוי שהורדתם בעבר.' },
   viewlink: { t:'קישור צפייה בלבד', b:'קישור מיוחד לשיתוף עם לקוח או מפקח — הם רואים את כל המשימות והסטטוסים אבל <b>לא יכולים לערוך כלום</b>.<br><br>שימו לב: מרגע שחוקי האבטחה מופעלים, גם צפייה דורשת חשבון — אפשר ליצור משתמש "צופה" ייעודי לזה.' },
   log: { t:'יומן הפעילות', b:'כל פעולה במערכת נרשמת אוטומטית: מי, מה ומתי — פתיחת משימות, עדכוני סטטוס, מחיקות, מכירות, שיוכים.<br><br>גלוי למנהלים בלבד. אי אפשר למחוק או לערוך אותו.' },
+  checkin: { t:'נוכחות — סימון הגעה ועזיבה', b:'<b>📍 סימון הגעה:</b> הגעתם לאתר? לוחצים, בוחרים את האתר, ומאשרים. השעה והמיקום (GPS) נרשמים אוטומטית.<br><br><b>🏁 סימון עזיבה:</b> בסוף העבודה באתר.<br><br>הנתונים נכנסים לדוח היומי — כולל קישור למפה של נקודת הסימון. זה דוח השעות שלכם, אל תשכחו לסמן!' },
+  leads: { t:'קריאות מלקוחות', b:'לקוחות יכולים לפתוח קריאת שירות בעצמם דרך קישור ייעודי — בלי סיסמה ובלי גישה למערכת.<br><br>הפניות מגיעות לכאן, ממוינות לפי דחיפות. <b>✔ קליטה כקריאה</b> מכניסה אותן לרשימת הקריאות הרגילה לשיבוץ טכנאי.' },
   team: { t:'ניהול צוות וכניסות', b:'<b>הוספת עובד:</b> ＋ הוספה ← שם ותפקיד.<br><br><b>יצירת כניסה עם סיסמה:</b> לוחצים על העובד ← מזינים את האימייל האישי שלו (עדיף אמיתי, בשביל שחזור סיסמה) ← "🔑 צור כניסה" ← קובעים סיסמה ראשונית ← שולחים לו את הפרטים בוואטסאפ.<br><br>🔑 ליד שם = יש לו כניסה פעילה.<br><br><b>חסימת עובד:</b> דרך Firebase ← Authentication ← Users ← Disable.' },
   perms: { t:'הרשאות במערכת', b:'<b>מנהלים</b> (אבישי, ליאל, הילה): הכל — כולל מחיקה, אישור בקשות, ניהול צוות ופרויקטים, גיבויים ויומן.<br><br><b>טכנאים וקבלנים:</b> פותחים ומעדכנים משימות וקריאות, מעלים תמונות, מדווחים ביצוע ומכירות, מבקשים למשוך — <b>אבל לא מוחקים כלום</b>.<br><br>הזיהוי לפי האימייל שאיתו נכנסתם — כל פעולה על שמכם.' }
 };
+function nowTime(){ const d = new Date(); return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0'); }
+function getPos(){
+  return new Promise(res => {
+    if (!navigator.geolocation) return res(null);
+    navigator.geolocation.getCurrentPosition(
+      p => res({ lat: +p.coords.latitude.toFixed(6), lng: +p.coords.longitude.toFixed(6), acc: Math.round(p.coords.accuracy) }),
+      () => res(null),
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 });
+  });
+}
+function openCheckIn(){
+  if (!guardEdit()) return;
+  modalShell('📍 סימון הגעה לאתר', `
+    <label>לאיזה אתר הגעת?</label>
+    <select id="ci_site">${siteList().map(s=>`<option>${esc(s)}</option>`).join('')}<option value="__other">אחר…</option></select>
+    <input id="ci_other" placeholder="שם האתר" style="display:none;margin-top:8px">
+    <div class="settings-sub" style="margin-top:10px">📡 בלחיצה על אישור יירשמו השעה והמיקום שלך (GPS). ייתכן שהדפדפן יבקש הרשאת מיקום — אשרו.</div>
+    <div class="form-actions"><button class="btn-primary" onclick="doCheckIn()">📍 אישור הגעה</button></div>`);
+  const sel = document.getElementById('ci_site');
+  if (sel) sel.onchange = e => { const o = document.getElementById('ci_other'); if (o) o.style.display = e.target.value === '__other' ? '' : 'none'; };
+}
+async function doCheckIn(){
+  const sel = document.getElementById('ci_site');
+  let site = sel && sel.value === '__other' ? (document.getElementById('ci_other')||{value:''}).value.trim() : (sel?sel.value:'');
+  if (!site){ toastMsg('בחרו אתר'); return; }
+  toastMsg('📡 מאתר מיקום…');
+  const pos = await getPos();
+  S.checkins = S.checkins || [];
+  S.checkins.push(Object.assign({ id: uid(), type:'in', by:USER, d:today(), t:nowTime(), site, noGps: !pos }, pos || {}));
+  if (S.checkins.length > 600) S.checkins = S.checkins.slice(-600);
+  pushLog('📍 סימן הגעה: ' + site + (pos ? '' : ' (ללא מיקום)'));
+  await persist(); closeModal(); render();
+  toastMsg(pos ? '📍 ההגעה נרשמה עם מיקום ✓' : 'ההגעה נרשמה — ללא GPS (אין הרשאת מיקום)');
+}
+async function checkOut(){
+  if (!guardEdit()) return;
+  toastMsg('📡 מאתר מיקום…');
+  const pos = await getPos();
+  const mine = (S.checkins||[]).filter(c=>c.by===USER && c.d===today() && c.type==='in');
+  const site = mine.length ? mine[mine.length-1].site : '';
+  S.checkins = S.checkins || [];
+  S.checkins.push(Object.assign({ id: uid(), type:'out', by:USER, d:today(), t:nowTime(), site, noGps: !pos }, pos || {}));
+  if (S.checkins.length > 600) S.checkins = S.checkins.slice(-600);
+  pushLog('🏁 סימן עזיבה' + (site ? ': ' + site : '') + (pos ? '' : ' (ללא מיקום)'));
+  await persist(); render();
+  toastMsg('🏁 העזיבה נרשמה ✓');
+}
+async function acceptLead(fid){
+  if (!isAdmin()){ toastMsg('קליטת קריאות למנהלים בלבד'); return; }
+  const l = LEADS.find(x=>x.fid===fid); if (!l) return;
+  const mapU = { 'דחוף':'דחוף', 'גבוה':'גבוה', 'בינוני':'רגיל', 'רגיל':'נמוך' };
+  S.calls.unshift({
+    id: uid(), customer: l.site || l.name || 'לקוח',
+    desc: (l.topic ? l.topic + ' — ' : '') + (l.desc || 'קריאת שירות'),
+    phone: l.phone || '', technician: '', urgency: mapU[l.urgency] || 'רגיל',
+    status: 'חדשה', notes: 'התקבל מטופס לקוח' + (l.name ? ' · איש קשר: ' + l.name : ''),
+    created: today(), createdBy: 'טופס לקוח'
+  });
+  pushLog('קלט קריאת לקוח: ' + (l.site || l.name || ''));
+  await persist();
+  try { await db.collection('leads').doc(fid).delete(); } catch(e){}
+  render(); toastMsg('הקריאה נקלטה ✓');
+}
+async function dropLead(fid){
+  if (!isAdmin()){ toastMsg('למנהלים בלבד'); return; }
+  if (!confirm('למחוק את הפנייה בלי לקלוט?')) return;
+  const l = LEADS.find(x=>x.fid===fid);
+  pushLog('מחק פניית לקוח: ' + (l ? (l.site||l.name||'') : ''));
+  try { await db.collection('leads').doc(fid).delete(); } catch(e){}
+  toastMsg('הפנייה נמחקה');
+}
 function helpBtn(key){ return `<button class="help-q" onclick="event.preventDefault();event.stopPropagation();showHelp('${key}')">?</button>`; }
 function showHelp(key){
   const h = HELP[key]; if (!h) return;
@@ -396,13 +469,22 @@ auth.onAuthStateChanged(u => {
     startData();
   } else {
     if (unsubData){ unsubData(); unsubData = null; }
+    if (unsubLeads){ unsubLeads(); unsubLeads = null; }
+    LEADS = [];
     S = null; USER = '';
     document.getElementById('app').innerHTML = '<div class="card empty">נדרשת התחברות</div>';
     ls.style.display = 'flex';
   }
 });
+let LEADS = [];
+let unsubLeads = null;
 function startData(){
   if (unsubData) return;
+  unsubLeads = db.collection('leads').onSnapshot(qs => {
+    LEADS = qs.docs.map(dd => Object.assign({ fid: dd.id }, dd.data()));
+    LEADS.sort((a,b)=>['דחוף','גבוה','בינוני','רגיל'].indexOf(a.urgency||'רגיל') - ['דחוף','גבוה','בינוני','רגיל'].indexOf(b.urgency||'רגיל'));
+    if (S) render();
+  }, () => {});
   unsubData = DOC.onSnapshot(snap => {
   setConn(true);
   if (!snap.exists) {
@@ -411,7 +493,7 @@ function startData(){
   } else {
     S = snap.data();
     S.projects = S.projects || []; S.team = S.team || [];
-    S.tasks = S.tasks || []; S.calls = S.calls || [];
+    S.tasks = S.tasks || []; S.calls = S.calls || []; S.checkins = S.checkins || [];
   }
   if (!reportProj) { const p = S.projects.find(x=>x.active); reportProj = p?p.id:''; }
   if (snap.exists && !snap.metadata.hasPendingWrites) serverState = JSON.stringify(S);
@@ -571,6 +653,24 @@ function render(){
 
 /* ---------- Home ---------- */
 function renderHome(){
+  const openLeadsHtml = (isAdmin() && LEADS.length) ? `<div class="card"><div class="card-title" style="color:#D64545">📥 קריאות חדשות מלקוחות (${LEADS.length}) ${helpBtn('leads')}</div>` + LEADS.map(l=>`
+    <div class="mini-task" style="cursor:default"><span class="dot" style="background:${l.urgency==='דחוף'?'#D64545':l.urgency==='גבוה'?'#E08A2E':'#3B6EA5'}"></span>
+    <div style="flex:1"><div class="mini-task-title">${esc(l.site||l.name||'לקוח')} — ${esc(l.topic||'')}</div>
+    <div class="mini-task-sub">${esc(l.name||'')} · <a href="tel:${esc(l.phone||'')}" style="color:#3B6EA5;font-weight:700">${esc(l.phone||'')}</a> · דחיפות: ${esc(l.urgency||'רגיל')}${l.desc?`<br>${esc(l.desc)}`:''}</div>
+    <div class="task-actions">
+      <button class="btn-mini" style="background:#3E8E5A" onclick="acceptLead('${l.fid}')">✔ קליטה כקריאה</button>
+      <button class="btn-mini" style="background:#D64545" onclick="dropLead('${l.fid}')">✕</button>
+    </div></div></div>`).join('') + `</div>` : '';
+  const ciHtml = (!READONLY && USER) ? (()=>{
+    const mine = (S.checkins||[]).filter(c=>c.by===USER && c.d===today());
+    const last = mine[mine.length-1];
+    const onSite = last && last.type==='in';
+    return `<div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+      <div><div class="card-title" style="margin:0">🕒 נוכחות ${helpBtn('checkin')}</div>
+      <div class="settings-sub">${onSite?`באתר: ${esc(last.site||'')} · מאז ${esc(last.t)}`:(last?`היום: סיימת ב-${esc(last.t)}`:'טרם סומנה הגעה היום')}</div></div>
+      ${onSite?`<button class="btn-mini" style="background:#D64545;flex-shrink:0" onclick="checkOut()">🏁 סימון עזיבה</button>`:`<button class="btn-mini" style="background:#3E8E5A;flex-shrink:0" onclick="openCheckIn()">📍 סימון הגעה</button>`}
+    </div>`;
+  })() : '';
   const open = S.tasks.filter(t=>t.status==='פתוח'||t.status==='בטיפול');
   const urgent = open.filter(t=>t.urgency==='דחוף');
   const overdue = S.tasks.filter(isOverdue);
@@ -585,11 +685,13 @@ function renderHome(){
   const maxOpen = Math.max(1, ...byProj.map(x=>x.open));
 
   return `
+    ${openLeadsHtml}
+    ${ciHtml}
     <div class="kpi-grid">
-      ${kpi('משימות פתוחות', open.length, '#D64545')}
-      ${kpi('דחופות', urgent.length, '#E08A2E')}
-      ${kpi('באיחור', overdue.length, '#8E44AD')}
-      ${kpi('ממתינות לאישור', waiting.length, '#3B6EA5')}
+      ${kpi('משימות פתוחות', open.length, '#D64545', 'open')}
+      ${kpi('דחופות', urgent.length, '#E08A2E', 'urgent')}
+      ${kpi('באיחור', overdue.length, '#8E44AD', 'overdue')}
+      ${kpi('ממתינות לאישור', waiting.length, '#3B6EA5', 'waiting')}
     </div>
     ${isAdmin() ? pendingCard() : ''}
     <div class="card">
@@ -605,8 +707,8 @@ function renderHome(){
     ${urgent.length ? `
       <div class="card">
         <div class="card-title urgent-title">🔥 דחוף עכשיו</div>
-        ${urgent.slice(0,5).map(t=>`
-          <div class="mini-task" onclick="goTab('tasks')">
+        ${urgent.map(t=>`
+          <div class="mini-task" onclick="kpiGo('urgent')">
             <span class="dot" style="background:${URGENCY_COLORS[t.urgency]}"></span>
             <div><div class="mini-task-title">${esc(t.title)}</div>
             <div class="mini-task-sub">${esc(projName(t.projectId))} · ${esc(t.assignee||'לא שובץ')}</div></div>
@@ -645,16 +747,24 @@ function renderHome(){
           </div>`).join('')}
     </div>`;
 }
-const kpi = (label,value,color)=>`<div class="kpi" style="border-inline-start-color:${color}"><div class="kpi-value" style="color:${color}">${value}</div><div class="kpi-label">${label}</div></div>`;
+const kpi = (label,value,color,go)=>`<div class="kpi" style="border-inline-start-color:${color};cursor:pointer" onclick="kpiGo('${go}')"><div class="kpi-value" style="color:${color}">${value}</div><div class="kpi-label">${label}</div></div>`;
+function kpiGo(kind){
+  filters.proj = 'all'; filters.assignee = 'all';
+  filters.status = kind === 'waiting' ? 'בוצע' : 'open';
+  filters.special = (kind === 'urgent' || kind === 'overdue') ? kind : null;
+  goTab('tasks');
+}
 
 /* ---------- Tasks ---------- */
-function setFilter(k,v){ filters[k]=v; render(); }
+function setFilter(k,v){ filters[k]=v; filters.special=null; render(); }
 function filteredTasks(){
   return S.tasks.filter(t=>{
     if (filters.proj!=='all' && t.projectId!==filters.proj) return false;
     if (filters.status==='open' && t.status==='אושר') return false;
     if (filters.status!=='all' && filters.status!=='open' && t.status!==filters.status) return false;
     if (filters.assignee!=='all' && t.assignee!==filters.assignee) return false;
+    if (filters.special==='urgent' && t.urgency!=='דחוף') return false;
+    if (filters.special==='overdue' && !isOverdue(t)) return false;
     return true;
   }).sort((a,b)=>URGENCIES.indexOf(a.urgency)-URGENCIES.indexOf(b.urgency));
 }
@@ -677,6 +787,7 @@ function renderTasks(){
         ${S.team.map(m=>`<option value="${esc(m.name)}"${filters.assignee===m.name?' selected':''}>${esc(m.name)}</option>`).join('')}
       </select>
     </div>
+    ${filters.special?`<div style="margin:-4px 0 10px"><span class="req-banner" style="margin:0;display:inline-flex">${filters.special==='urgent'?'🔥 מציג: דחופות בלבד':'⚠️ מציג: באיחור בלבד'} <button class="btn-tiny no" onclick="filters.special=null;render()">✕ ניקוי</button></span></div>`:''}
     ${list.length===0 ? '<div class="card empty">אין משימות בסינון הנוכחי</div>' : list.map(taskCard).join('')}
     ${READONLY?'':'<button class="fab" onclick="openTaskForm()">＋ משימה חדשה</button>'}`;
 }
@@ -1071,6 +1182,16 @@ function buildDailyReport(d){
     openC.forEach(c => { msg += `▫️ ${c.customer} — ${c.desc} (${c.status})${c.technician ? ' · ' + c.technician : ''}\n`; });
   }
 
+  const att = (S.checkins||[]).filter(c=>c.d===d);
+  if (att.length){
+    msg += `\n🕒 *נוכחות:*\n`;
+    att.forEach(c => {
+      msg += `${c.type==='in'?'📍':'🏁'} ${c.by} — ${c.type==='in'?'הגעה':'עזיבה'} ${c.t}${c.site?' · '+c.site:''}`;
+      if (c.lat) msg += `\nמפה: https://maps.google.com/?q=${c.lat},${c.lng}`;
+      if (c.noGps) msg += ' ⚠️ ללא GPS';
+      msg += `\n`;
+    });
+  }
   if (ups.length) {
     msg += `\n💰 *מכירות/לידים שנרשמו היום:*\n`;
     ups.forEach(u => { msg += `▫️ ${u.upsellType ? '[' + u.upsellType + '] ' : ''}${u.upsell}${u.upsellAmt ? ' — ' + u.upsellAmt + ' ₪' : ''} (${u.updatedBy || u.createdBy || ''})\n`; });
