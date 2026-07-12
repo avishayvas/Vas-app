@@ -509,6 +509,30 @@ function startData(){
     : 'בדקו חיבור אינטרנט';
   document.getElementById('app').innerHTML = '<div class="card empty">❌ אין חיבור למסד הנתונים.<br>'+why+'</div>';
   });
+  try {
+    db.collection('vas_intake').onSnapshot(qs => {
+      if (!S) return;
+      qs.docChanges().forEach(ch => { if (ch.type === 'added') importIntake(ch.doc.id, ch.doc.data()); });
+    }, () => {});
+  } catch(e){}
+}
+async function importIntake(docId, d){
+  try { await db.collection('vas_intake').doc(docId).delete(); } catch(e){ return; }
+  const urgMap = { 'דחוף':'דחוף', 'גבוה':'גבוה', 'בינוני':'רגיל', 'רגיל':'נמוך' };
+  const c = {
+    id: uid(), created: today(),
+    customer: (d.site || '').trim(),
+    desc: (d.topic ? d.topic + ' — ' : '') + (d.desc || ''),
+    phone: (d.phone || '').trim(),
+    technician: '', urgency: urgMap[d.urgency] || 'רגיל', status: 'חדשה',
+    notes: 'נפתח על ידי הלקוח דרך הטופס' + (d.name ? ' · איש קשר: ' + d.name : ''),
+    createdBy: 'לקוח: ' + (d.name || 'טופס')
+  };
+  S.calls.unshift(c);
+  pushLog('📥 קריאה חדשה מטופס לקוח: ' + c.customer);
+  await persist();
+  render();
+  toastMsg('📥 קריאה חדשה מלקוח: ' + c.customer);
 }
 let serverState = null;
 
@@ -814,6 +838,7 @@ function taskCard(t){
       ${t.upsell?`<div class="task-notes" style="background:#EFF7F0;color:#2C6E48;font-weight:600">💰 ${esc(t.upsellType||'מכירה נוספת')}: ${esc(t.upsell)}${t.upsellAmt?` — ${esc(t.upsellAmt)} ₪`:''}${t.updatedBy?` (${esc(t.updatedBy)})`:''}${t.upsellPaid?' · תוגמל ✓':''}</div>`:''}
       ${mediaStrip(taskMedia(t))}
       ${claimBlock('task', t)}
+      ${presenceBlock('task', t)}
     </div>`;
 }
 function cycleTaskStatus(id){
@@ -957,7 +982,12 @@ async function deleteTask(id){
 
 /* ---------- Service calls ---------- */
 function renderCalls(){
-  const list = S.calls.filter(c=>callsShowClosed || c.status!=='נסגרה');
+  const list = S.calls.filter(c=>callsShowClosed || c.status!=='נסגרה')
+    .sort((a,b)=>{
+      const ac = a.status==='נסגרה'?1:0, bc = b.status==='נסגרה'?1:0;
+      if (ac!==bc) return ac-bc;
+      return URGENCIES.indexOf(a.urgency)-URGENCIES.indexOf(b.urgency);
+    });
   return `
     <label class="toggle-row"><input type="checkbox" ${callsShowClosed?'checked':''} onchange="callsShowClosed=this.checked;render()"> הצג גם קריאות סגורות ${helpBtn('calls')}</label>
     ${list.length===0 ? '<div class="card empty">אין קריאות שירות</div>' : list.map(c=>`
@@ -981,6 +1011,7 @@ function renderCalls(){
         ${c.upsell?`<div class="task-notes" style="background:#EFF7F0;color:#2C6E48;font-weight:600">💰 ${esc(c.upsellType||'מכירה נוספת')}: ${esc(c.upsell)}${c.upsellAmt?` — ${esc(c.upsellAmt)} ₪`:''}${c.updatedBy?` (${esc(c.updatedBy)})`:''}${c.upsellPaid?' · תוגמל ✓':''}</div>`:''}
         ${mediaStrip(c.media)}
         ${claimBlock('call', c)}
+        ${presenceBlock('call', c)}
       </div>`).join('')}
     ${READONLY?'':'<button class="fab" onclick="openCallForm()">＋ קריאה חדשה</button>'}`;
 }
@@ -1192,6 +1223,14 @@ function buildDailyReport(d){
       msg += `\n`;
     });
   }
+  const pres = [];
+  S.tasks.forEach(t => (t.presence||[]).forEach(p => { if (p.d === d) pres.push({ by:p.by, type:p.type, t:p.t, where: projName(t.projectId) + (t.location ? ' · ' + t.location : '') }); }));
+  S.calls.forEach(c => (c.presence||[]).forEach(p => { if (p.d === d) pres.push({ by:p.by, type:p.type, t:p.t, where: c.customer }); }));
+  if (pres.length){
+    msg += `\n📍 *נוכחות באתרים:*\n`;
+    pres.sort((a,b)=>a.t.localeCompare(b.t)).forEach(p => { msg += `▫️ ${p.by} — ${p.type==='in'?'הגעה':'סיום'} ${p.t} · ${p.where}\n`; });
+  }
+
   if (ups.length) {
     msg += `\n💰 *מכירות/לידים שנרשמו היום:*\n`;
     ups.forEach(u => { msg += `▫️ ${u.upsellType ? '[' + u.upsellType + '] ' : ''}${u.upsell}${u.upsellAmt ? ' — ' + u.upsellAmt + ' ₪' : ''} (${u.updatedBy || u.createdBy || ''})\n`; });
@@ -1485,6 +1524,44 @@ function applyReport(kind, id, nextStatus, skip){
   }
   pushLog('עדכן סטטוס "' + (kind==='task'?x.title:x.customer) + '" ל-' + nextStatus + (x.report && !skip ? ' · דיווח: ' + x.report.slice(0,60) : ''));
   closeModal(); persist(); render(); toastMsg('סטטוס עודכן: ' + nextStatus);
+}
+function presenceBlock(kind, x){
+  let h = '';
+  if (x.presence && x.presence.length){
+    h += `<div class="task-notes" style="background:#F3EFFA;color:#5B3E8E">` +
+      x.presence.map(p=>`📍 ${esc(p.by)} ${p.type==='in'?'הגיע':'סיים'} ${esc(p.d===today()?'':fmtDate(p.d)+' ')}${esc(p.t)} <a href="https://maps.google.com/?q=${p.lat},${p.lng}" target="_blank" style="color:#5B3E8E;font-weight:800;text-decoration:underline">מפה</a>`).join('<br>') +
+      `</div>`;
+  }
+  const final = kind==='task' ? ['בוצע','אושר'].includes(x.status) : x.status==='נסגרה';
+  if (!READONLY && USER && !final){
+    const last = (x.presence||[]).slice().reverse().find(p=>p.by===USER);
+    const isIn = last && last.type==='in';
+    h += `<div class="task-actions"><button class="btn-tiny" style="${isIn?'background:#5B3E8E;color:#fff':''}" onclick="markPresence('${kind}','${x.id}')">${isIn?'🏁 סיום עבודה באתר':'📍 הגעתי לאתר'}</button></div>`;
+  }
+  return h;
+}
+function markPresence(kind, id){
+  if (!guardEdit()) return;
+  if (!navigator.geolocation){ toastMsg('אין שירות מיקום במכשיר'); return; }
+  toastMsg('מאתר מיקום… 📡');
+  navigator.geolocation.getCurrentPosition(pos => {
+    const arr = kind==='task' ? S.tasks : S.calls;
+    const x = arr.find(i=>i.id===id); if (!x) return;
+    x.presence = x.presence || [];
+    const last = x.presence.slice().reverse().find(p=>p.by===USER);
+    const type = (last && last.type==='in') ? 'out' : 'in';
+    const now = new Date();
+    x.presence.push({
+      by: USER, type, d: today(),
+      t: String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0'),
+      lat: +pos.coords.latitude.toFixed(6), lng: +pos.coords.longitude.toFixed(6)
+    });
+    pushLog((type==='in'?'📍 הגעה לאתר':'🏁 סיום באתר') + ': ' + (kind==='task'?x.title:x.customer));
+    persist(); render();
+    toastMsg(type==='in' ? 'ההגעה נרשמה 📍' : 'הסיום נרשם 🏁');
+  }, err => {
+    toastMsg(err && err.code === 1 ? 'הדפדפן חסם מיקום — אשרו הרשאת מיקום לאתר' : 'לא הצלחנו לאתר מיקום — נסו שוב');
+  }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 });
 }
 function toggleUpsellPaid(kind, id){
   if (!isAdmin()){ toastMsg('סימון תגמול למנהלים בלבד'); return; }
