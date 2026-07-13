@@ -256,6 +256,7 @@ let tab = 'home';
 let filters = { proj:'all', status:'open', assignee:'all', special:null };
 let callsShowClosed = false;
 let reportProj = '', reportPerson = '', reportDate = '';
+let billFrom = '', billTo = '';
 const photoCache = {};
 
 const uid = () => Math.random().toString(36).slice(2,9) + Date.now().toString(36).slice(-4);
@@ -291,7 +292,7 @@ function doLogin(){
   });
 }
 function doLogout(){ if (confirm('להתנתק מהמערכת?')) auth.signOut(); }
-let seenTaskIds = null, seenCallIds = null;
+let seenTaskIds = null, seenCallIds = null, seenStatus = null;
 function maybeNotifyNew(){
   if (!S) return;
   const tIds = new Set(S.tasks.map(t=>t.id));
@@ -306,6 +307,22 @@ function maybeNotifyNew(){
         notif('🛠️ קריאת שירות חדשה: ' + c.customer, (c.desc || '') + (c.urgency==='דחוף' ? ' · 🔴 דחוף' : ''));
     });
   }
+  const stMap = {};
+  S.tasks.forEach(t => stMap['t'+t.id] = t.status);
+  S.calls.forEach(c => stMap['c'+c.id] = c.status);
+  if (seenStatus && isAdmin()){
+    S.tasks.forEach(t => {
+      const k = 't'+t.id;
+      if (seenStatus[k] !== undefined && seenStatus[k] !== t.status && ['בוצע','אושר'].includes(t.status) && !['בוצע','אושר'].includes(seenStatus[k]) && t.updatedBy !== USER)
+        notif('✅ עבודה הושלמה — לחיוב', t.title + ' · ' + projName(t.projectId) + (t.updatedBy ? ' — ' + t.updatedBy : ''));
+    });
+    S.calls.forEach(c => {
+      const k = 'c'+c.id;
+      if (seenStatus[k] !== undefined && seenStatus[k] !== c.status && c.status === 'נסגרה' && c.updatedBy !== USER)
+        notif('✅ קריאה נסגרה — לחיוב', c.customer + ' — ' + (c.desc || '') + (c.updatedBy ? ' · ' + c.updatedBy : ''));
+    });
+  }
+  seenStatus = stMap;
   seenTaskIds = tIds; seenCallIds = cIds;
 }
 function notif(title, body){
@@ -347,6 +364,7 @@ const HELP = {
   checkin: { t:'נוכחות — סימון הגעה ועזיבה', b:'<b>📍 סימון הגעה:</b> הגעתם לאתר? לוחצים, בוחרים את האתר, ומאשרים. השעה והמיקום (GPS) נרשמים אוטומטית.<br><br><b>🏁 סימון עזיבה:</b> בסוף העבודה באתר.<br><br>הנתונים נכנסים לדוח היומי — כולל קישור למפה של נקודת הסימון. זה דוח השעות שלכם, אל תשכחו לסמן!' },
   leads: { t:'קריאות מלקוחות', b:'לקוחות יכולים לפתוח קריאת שירות בעצמם דרך קישור ייעודי — בלי סיסמה ובלי גישה למערכת.<br><br>הפניות מגיעות לכאן, ממוינות לפי דחיפות. <b>✔ קליטה כקריאה</b> מכניסה אותן לרשימת הקריאות הרגילה לשיבוץ טכנאי.' },
   team: { t:'ניהול צוות וכניסות', b:'<b>הוספת עובד:</b> ＋ הוספה ← שם ותפקיד.<br><br><b>יצירת כניסה עם סיסמה:</b> לוחצים על העובד ← מזינים את האימייל האישי שלו (עדיף אמיתי, בשביל שחזור סיסמה) ← "🔑 צור כניסה" ← קובעים סיסמה ראשונית ← שולחים לו את הפרטים בוואטסאפ.<br><br>🔑 ליד שם = יש לו כניסה פעילה.<br><br><b>חסימת עובד:</b> דרך Firebase ← Authentication ← Users ← Disable.' },
+  billing: { t:'צינור החיוב', b:'כל עבודה שמסתיימת — משימה שאושרה או קריאה שנסגרה — נכנסת אוטומטית למצב <b>💳 ממתין לחיוב</b>.<br><br><b>בדשבורד</b> (מנהלים): רשימת כל הממתינות. אחרי שהוצאתם חשבונית — "✓ חויב" (עם מספר חשבונית). עבודה באחריות או כלולה בחוזה — "ללא חיוב".<br><br><b>דוח החיוב</b> (לשונית דוחות): בוחרים טווח תאריכים ומקבלים את כל העבודות שהושלמו, מקובצות לפי לקוח, עם דיווחי הביצוע והכמויות — מוכן להנהלת חשבונות.<br><br>המנהלים מקבלים גם התראה במכשיר בכל פעם שטכנאי מסיים עבודה.' },
   notifs: { t:'התראות', b:'אחרי הפעלה, המכשיר יקפיץ התראה על כל <b>קריאת שירות חדשה</b> (כולל מטופס הלקוחות) ועל כל <b>משימה חדשה</b> שמישהו אחר פתח.<br><br><b>חשוב לדעת:</b> ההתראות מגיעות כשהאפליקציה פתוחה — גם ברקע או בטאב אחר. אם סגרתם אותה לגמרי, ההתראה תגיע ברגע שתפתחו שוב.<br><br>מפעילים פעם אחת בכל מכשיר. אם לחצתם "חסימה" בטעות — הגדרות הדפדפן ← התראות ← לאשר לאתר.' },
   perms: { t:'הרשאות במערכת', b:'<b>מנהלים</b> (אבישי, ליאל, הילה): הכל — כולל מחיקה, אישור בקשות, ניהול צוות ופרויקטים, גיבויים ויומן.<br><br><b>טכנאים וקבלנים:</b> פותחים ומעדכנים משימות וקריאות, מעלים תמונות, מדווחים ביצוע ומכירות, מבקשים למשוך — <b>אבל לא מוחקים כלום</b>.<br><br>הזיהוי לפי האימייל שאיתו נכנסתם — כל פעולה על שמכם.' }
 };
@@ -803,6 +821,20 @@ function renderHome(){
         <div class="mini-task-sub">${esc(u.who)} · ${fmtDate(u.d||'')}</div></div>
         <button class="btn-mini" style="background:${u.paid?'#8A8F9C':'#3E8E5A'}" onclick="toggleUpsellPaid('${u.kind}','${u.id}')">${u.paid?'תוגמל ✓':'סמן כתוגמל'}</button></div>`).join('') + `</div>`;
     })()}
+    ${(()=>{ if(!isAdmin()) return '';
+      const bills = [
+        ...S.tasks.filter(t=>['בוצע','אושר'].includes(t.status) && !t.billing).map(t=>({kind:'task', id:t.id, what:t.title, cust:projName(t.projectId), by:t.closedBy||t.updatedBy||'', d:t.closedAt||t.updatedAt||''})),
+        ...S.calls.filter(c=>c.status==='נסגרה' && !c.billing).map(c=>({kind:'call', id:c.id, what:c.desc, cust:c.customer, by:c.closedBy||c.updatedBy||'', d:c.closedAt||c.updatedAt||''}))
+      ];
+      if (!bills.length) return '';
+      bills.sort((a,b)=>(b.d||'').localeCompare(a.d||''));
+      return `<div class="card"><div class="card-title" style="color:#C9962E">💳 ממתינות לחיוב (${bills.length}) ${helpBtn('billing')}</div>` + bills.slice(0,6).map(b=>`
+        <div class="mini-task" style="cursor:default"><span class="dot" style="background:#C9962E"></span>
+        <div style="flex:1"><div class="mini-task-title">${esc(b.cust)} — ${esc(b.what)}</div>
+        <div class="mini-task-sub">${esc(b.by)} · ${fmtDate(b.d)}</div>
+        <div class="task-actions"><button class="btn-tiny ok" onclick="markBilled('${b.kind}','${b.id}')">✓ חויב</button>
+        <button class="btn-tiny" onclick="markNoCharge('${b.kind}','${b.id}')">ללא חיוב</button></div></div></div>`).join('') + (bills.length>6?`<div class="settings-sub" style="text-align:center;margin-top:6px">ועוד ${bills.length-6} — הרשימה המלאה בדוח החיוב בלשונית דוחות</div>`:'') + `</div>`;
+    })()}
     <div class="card">
       <div class="card-title">קריאות שירות פתוחות</div>
       ${openCalls.length===0 ? '<div class="empty">אין קריאות פתוחות 👌</div>' :
@@ -882,6 +914,7 @@ function taskCard(t){
       ${mediaStrip(taskMedia(t))}
       ${claimBlock('task', t)}
       ${presenceBlock('task', t)}
+      ${billingBlock('task', t)}
     </div>`;
 }
 function cycleTaskStatus(id){
@@ -1055,6 +1088,7 @@ function renderCalls(){
         ${mediaStrip(c.media)}
         ${claimBlock('call', c)}
         ${presenceBlock('call', c)}
+        ${billingBlock('call', c)}
       </div>`).join('')}
     ${READONLY?'':'<button class="fab" onclick="openCallForm()">＋ קריאה חדשה</button>'}`;
 }
@@ -1284,6 +1318,7 @@ function buildDailyReport(d){
 }
 function renderReports(){
   if (!reportDate) reportDate = today();
+  if (!billFrom){ billFrom = today().slice(0,8) + '01'; billTo = today(); }
   const dailyRep = buildDailyReport(reportDate);
   const projRep = reportProj ? buildProjReport(reportProj) : '';
   const persRep = reportPerson ? buildPersonReport(reportPerson) : '';
@@ -1297,6 +1332,19 @@ function renderReports(){
         <button class="btn-primary" onclick="waReport('daily')">💬 שליחה בוואטסאפ</button>
       </div>
     </div>
+    ${isAdmin()?`
+    <div class="card">
+      <div class="card-title">💳 דוח עבודות לחיוב ${helpBtn('billing')}</div>
+      <div class="form-2col">
+        <div><label style="display:block;font-size:12px;font-weight:700;color:#555B69;margin-bottom:4px">מתאריך</label><input type="date" value="${esc(billFrom)}" onchange="billFrom=this.value;render()"></div>
+        <div><label style="display:block;font-size:12px;font-weight:700;color:#555B69;margin-bottom:4px">עד תאריך</label><input type="date" value="${esc(billTo)}" onchange="billTo=this.value;render()"></div>
+      </div>
+      <pre class="report-preview">${esc(buildBillingReport(billFrom, billTo))}</pre>
+      <div class="form-actions">
+        <button class="btn-secondary" onclick="copyReport('billing')">📋 העתקה</button>
+        <button class="btn-primary" onclick="waReport('billing')">💬 שליחה בוואטסאפ</button>
+      </div>
+    </div>`:''}
     <div class="card">
       <div class="card-title">📁 דוח מצב לפרויקט</div>
       <select onchange="reportProj=this.value;render()">
@@ -1323,11 +1371,11 @@ function renderReports(){
     </div>`;
 }
 function copyReport(kind){
-  const text = kind==='daily' ? buildDailyReport(reportDate) : kind==='proj' ? buildProjReport(reportProj) : buildPersonReport(reportPerson);
+  const text = kind==='billing' ? buildBillingReport(billFrom, billTo) : kind==='daily' ? buildDailyReport(reportDate) : kind==='proj' ? buildProjReport(reportProj) : buildPersonReport(reportPerson);
   copyText(text); toastMsg('הועתק — אפשר להדביק בוואטסאפ');
 }
 function waReport(kind){
-  const text = kind==='daily' ? buildDailyReport(reportDate) : kind==='proj' ? buildProjReport(reportProj) : buildPersonReport(reportPerson);
+  const text = kind==='billing' ? buildBillingReport(billFrom, billTo) : kind==='daily' ? buildDailyReport(reportDate) : kind==='proj' ? buildProjReport(reportProj) : buildPersonReport(reportPerson);
   window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
 }
 
@@ -1614,6 +1662,67 @@ function markPresence(kind, id){
   }, err => {
     toastMsg(err && err.code === 1 ? 'הדפדפן חסם מיקום — אשרו הרשאת מיקום לאתר' : 'לא הצלחנו לאתר מיקום — נסו שוב');
   }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 });
+}
+function billingBlock(kind, x){
+  const final = kind === 'task' ? ['בוצע','אושר'].includes(x.status) : x.status === 'נסגרה';
+  if (!final) return '';
+  if (x.billing){
+    return x.billing.state === 'billed'
+      ? `<div class="task-actions" style="color:#3E8E5A;font-weight:700;font-size:13px">💳 חויב ✓${x.billing.inv ? ` · חשבונית ${esc(x.billing.inv)}` : ''} (${esc(x.billing.by||'')})</div>`
+      : `<div class="task-actions" style="color:#8A8F9C;font-weight:700;font-size:13px">➖ ללא חיוב (${esc(x.billing.by||'')})</div>`;
+  }
+  let h = `<div class="task-actions" style="color:#C9962E;font-weight:800;font-size:13px">💳 ממתין לחיוב`;
+  if (isAdmin()) h += `<button class="btn-tiny ok" onclick="markBilled('${kind}','${x.id}')">✓ חויב</button><button class="btn-tiny" onclick="markNoCharge('${kind}','${x.id}')">ללא חיוב</button>`;
+  return h + `</div>`;
+}
+function markBilled(kind, id){
+  if (!isAdmin()){ toastMsg('סימון חיוב למנהלים בלבד'); return; }
+  const arr = kind === 'task' ? S.tasks : S.calls;
+  const x = arr.find(i=>i.id===id); if (!x) return;
+  const inv = (prompt('מספר חשבונית (לא חובה):') || '').trim();
+  x.billing = { state: 'billed', inv, by: USER, d: today() };
+  pushLog('💳 סימן כחויב' + (inv ? ' (חשבונית ' + inv + ')' : '') + ': ' + (kind==='task'?x.title:x.customer));
+  persist(); render(); toastMsg('סומן כחויב ✓');
+}
+function markNoCharge(kind, id){
+  if (!isAdmin()){ toastMsg('למנהלים בלבד'); return; }
+  const arr = kind === 'task' ? S.tasks : S.calls;
+  const x = arr.find(i=>i.id===id); if (!x) return;
+  if (!confirm('לסמן כעבודה ללא חיוב (אחריות / כלול בחוזה)?')) return;
+  x.billing = { state: 'none', by: USER, d: today() };
+  pushLog('➖ סימן ללא חיוב: ' + (kind==='task'?x.title:x.customer));
+  persist(); render(); toastMsg('סומן ללא חיוב');
+}
+function buildBillingReport(from, to){
+  const inRange = d => d && d >= from && d <= to;
+  const items = [];
+  S.tasks.forEach(t => {
+    if ((t.status === 'בוצע' || t.status === 'אושר') && inRange(t.closedAt || t.updatedAt))
+      items.push({ cust: projName(t.projectId), d: t.closedAt || t.updatedAt, what: t.title + (t.location ? ' (' + t.location + ')' : ''), rep: t.report || '', qty: t.qty || '', by: t.closedBy || t.updatedBy || '', bill: t.billing });
+  });
+  S.calls.forEach(c => {
+    if (c.status === 'נסגרה' && inRange(c.closedAt || c.updatedAt))
+      items.push({ cust: c.customer, d: c.closedAt || c.updatedAt, what: c.desc, rep: c.report || '', qty: c.qty || '', by: c.closedBy || c.updatedBy || '', bill: c.billing });
+  });
+  let msg = `*דוח עבודות לחיוב*\n📅 ${fmtDate(from)} — ${fmtDate(to)}\n`;
+  if (!items.length) return msg + '\nאין עבודות שהושלמו בתקופה זו';
+  const byCust = {};
+  items.forEach(i => (byCust[i.cust] = byCust[i.cust] || []).push(i));
+  let pending = 0, billed = 0;
+  Object.entries(byCust).forEach(([cust, arr]) => {
+    msg += `\n🏢 *${cust}* (${arr.length}):\n`;
+    arr.sort((a,b)=>(a.d||'').localeCompare(b.d||'')).forEach(i => {
+      const st = i.bill ? (i.bill.state === 'billed' ? '✅ חויב' + (i.bill.inv ? " חש' " + i.bill.inv : '') : '➖ ללא חיוב') : '💳 ממתין לחיוב';
+      if (!i.bill) pending++; else if (i.bill.state === 'billed') billed++;
+      msg += `▫️ ${fmtDate(i.d)} — ${i.what}`;
+      if (i.rep) msg += ` | ${i.rep}`;
+      if (i.qty) msg += ` (${i.qty})`;
+      msg += ` — ${i.by} · ${st}\n`;
+    });
+  });
+  msg += `\nסה"כ: ${items.length} עבודות · ${billed} חויבו · ${pending} ממתינות לחיוב`;
+  msg += '\n\n_VAS Security — ש.ו טכנולוגיות ביטחון_';
+  return msg;
 }
 function toggleUpsellPaid(kind, id){
   if (!isAdmin()){ toastMsg('סימון תגמול למנהלים בלבד'); return; }
