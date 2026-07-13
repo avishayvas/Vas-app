@@ -291,6 +291,47 @@ function doLogin(){
   });
 }
 function doLogout(){ if (confirm('להתנתק מהמערכת?')) auth.signOut(); }
+let seenTaskIds = null, seenCallIds = null;
+function maybeNotifyNew(){
+  if (!S) return;
+  const tIds = new Set(S.tasks.map(t=>t.id));
+  const cIds = new Set(S.calls.map(c=>c.id));
+  if (seenTaskIds && seenCallIds){
+    S.tasks.forEach(t => {
+      if (!seenTaskIds.has(t.id) && t.createdBy !== USER)
+        notif('📋 משימה חדשה: ' + t.title, projName(t.projectId) + (t.assignee ? ' · שובץ: ' + t.assignee : '') + (t.urgency==='דחוף' ? ' · 🔴 דחוף' : ''));
+    });
+    S.calls.forEach(c => {
+      if (!seenCallIds.has(c.id) && c.createdBy !== USER)
+        notif('🛠️ קריאת שירות חדשה: ' + c.customer, (c.desc || '') + (c.urgency==='דחוף' ? ' · 🔴 דחוף' : ''));
+    });
+  }
+  seenTaskIds = tIds; seenCallIds = cIds;
+}
+function notif(title, body){
+  try {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    if (navigator.serviceWorker && navigator.serviceWorker.ready){
+      navigator.serviceWorker.ready.then(reg =>
+        reg.showNotification(title, { body, icon: 'icon-192.png', badge: 'icon-192.png', dir: 'rtl', lang: 'he', tag: 'vas-' + Date.now() })
+      ).catch(() => { try { new Notification(title, { body, icon: 'icon-192.png' }); } catch(e){} });
+    } else {
+      try { new Notification(title, { body, icon: 'icon-192.png' }); } catch(e){}
+    }
+  } catch(e){}
+}
+function enableNotifs(){
+  if (!('Notification' in window)){ toastMsg('הדפדפן לא תומך בהתראות'); return; }
+  Notification.requestPermission().then(p => {
+    render();
+    if (p === 'granted'){
+      toastMsg('התראות הופעלו 🔔');
+      notif('VAS Security', 'ההתראות פעילות — תקבלו עדכון על כל קריאה ומשימה חדשה');
+    } else {
+      toastMsg('ההרשאה לא אושרה — אפשרו התראות לאתר בהגדרות הדפדפן');
+    }
+  });
+}
 const HELP = {
   tasks: { t:'איך עובד מסך המשימות', b:'<b>עדכון סטטוס:</b> לוחצים על התגית הצבעונית (פתוח / בטיפול / בוצע / אושר) והיא מתקדמת לשלב הבא. במעבר ל"בוצע" ייפתח חלון דיווח ביצוע.<br><br><b>עריכה:</b> לחיצה על שם המשימה פותחת את כל הפרטים לעריכה.<br><br><b>הפס הצבעוני בצד:</b> רמת הדחיפות — אדום דחוף, כתום גבוה, כחול רגיל.<br><br><b>🙋 בקשה למשוך אליי:</b> רוצים לקחת משימה שלא משובצת אליכם? לוחצים, ומנהל מאשר או דוחה.' },
   calls: { t:'איך עובדות קריאות שירות', b:'קריאת שירות היא תקלה אצל לקוח — נפרדת ממשימות הפרויקטים.<br><br><b>סטטוסים:</b> חדשה ← שובצה ← בטיפול ← נסגרה (לחיצה על התגית מקדמת). בסגירה יתבקש דיווח ביצוע.<br><br><b>📞 טלפון:</b> לחיצה על המספר מחייגת ישירות.<br><br><b>בחירה מהירה:</b> בטופס יש רשימה של כל סניפי מקס סטוק והפרויקטים — בחירת סניף ממלאת אוטומטית גם את טלפון מנהל הסניף.' },
@@ -306,6 +347,7 @@ const HELP = {
   checkin: { t:'נוכחות — סימון הגעה ועזיבה', b:'<b>📍 סימון הגעה:</b> הגעתם לאתר? לוחצים, בוחרים את האתר, ומאשרים. השעה והמיקום (GPS) נרשמים אוטומטית.<br><br><b>🏁 סימון עזיבה:</b> בסוף העבודה באתר.<br><br>הנתונים נכנסים לדוח היומי — כולל קישור למפה של נקודת הסימון. זה דוח השעות שלכם, אל תשכחו לסמן!' },
   leads: { t:'קריאות מלקוחות', b:'לקוחות יכולים לפתוח קריאת שירות בעצמם דרך קישור ייעודי — בלי סיסמה ובלי גישה למערכת.<br><br>הפניות מגיעות לכאן, ממוינות לפי דחיפות. <b>✔ קליטה כקריאה</b> מכניסה אותן לרשימת הקריאות הרגילה לשיבוץ טכנאי.' },
   team: { t:'ניהול צוות וכניסות', b:'<b>הוספת עובד:</b> ＋ הוספה ← שם ותפקיד.<br><br><b>יצירת כניסה עם סיסמה:</b> לוחצים על העובד ← מזינים את האימייל האישי שלו (עדיף אמיתי, בשביל שחזור סיסמה) ← "🔑 צור כניסה" ← קובעים סיסמה ראשונית ← שולחים לו את הפרטים בוואטסאפ.<br><br>🔑 ליד שם = יש לו כניסה פעילה.<br><br><b>חסימת עובד:</b> דרך Firebase ← Authentication ← Users ← Disable.' },
+  notifs: { t:'התראות', b:'אחרי הפעלה, המכשיר יקפיץ התראה על כל <b>קריאת שירות חדשה</b> (כולל מטופס הלקוחות) ועל כל <b>משימה חדשה</b> שמישהו אחר פתח.<br><br><b>חשוב לדעת:</b> ההתראות מגיעות כשהאפליקציה פתוחה — גם ברקע או בטאב אחר. אם סגרתם אותה לגמרי, ההתראה תגיע ברגע שתפתחו שוב.<br><br>מפעילים פעם אחת בכל מכשיר. אם לחצתם "חסימה" בטעות — הגדרות הדפדפן ← התראות ← לאשר לאתר.' },
   perms: { t:'הרשאות במערכת', b:'<b>מנהלים</b> (אבישי, ליאל, הילה): הכל — כולל מחיקה, אישור בקשות, ניהול צוות ופרויקטים, גיבויים ויומן.<br><br><b>טכנאים וקבלנים:</b> פותחים ומעדכנים משימות וקריאות, מעלים תמונות, מדווחים ביצוע ומכירות, מבקשים למשוך — <b>אבל לא מוחקים כלום</b>.<br><br>הזיהוי לפי האימייל שאיתו נכנסתם — כל פעולה על שמכם.' }
 };
 function nowTime(){ const d = new Date(); return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0'); }
@@ -498,6 +540,7 @@ function startData(){
   if (!reportProj) { const p = S.projects.find(x=>x.active); reportProj = p?p.id:''; }
   if (snap.exists && !snap.metadata.hasPendingWrites) serverState = JSON.stringify(S);
   bindUserFromAuth();
+  maybeNotifyNew();
   render();
   if (!READONLY && authUser && !USER){
     if (!S.team.some(t => t.email)){ if (!document.querySelector('.modal-overlay')) showBootstrapModal(); }
@@ -1291,6 +1334,15 @@ function waReport(kind){
 /* ---------- Settings ---------- */
 function renderSettings(){
   return `
+    <div class="card">
+      <div class="card-title">🔔 התראות ${helpBtn('notifs')}</div>
+      <div class="settings-sub">התראה במכשיר על כל קריאת שירות או משימה חדשה שנכנסת — כולל קריאות מטופס הלקוחות.</div>
+      <div class="form-actions" style="margin-top:10px">
+        ${(typeof Notification !== 'undefined' && Notification.permission === 'granted')
+          ? '<button class="btn-secondary" disabled>✓ ההתראות פעילות במכשיר הזה</button>'
+          : '<button class="btn-primary" onclick="enableNotifs()">🔔 הפעלת התראות</button>'}
+      </div>
+    </div>
     <div class="card">
       <div class="card-title">משתמש נוכחי ${helpBtn('perms')}</div>
       <div class="settings-row" style="cursor:default">
