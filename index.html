@@ -257,6 +257,7 @@ let filters = { proj:'all', status:'open', assignee:'all', special:null };
 let callsShowClosed = false;
 let reportProj = '', reportPerson = '', reportDate = '';
 let billFrom = '', billTo = '';
+let presFrom = '', presTo = '', presWho = '';
 const photoCache = {};
 
 const uid = () => Math.random().toString(36).slice(2,9) + Date.now().toString(36).slice(-4);
@@ -364,6 +365,7 @@ const HELP = {
   checkin: { t:'נוכחות — סימון הגעה ועזיבה', b:'<b>📍 סימון הגעה:</b> הגעתם לאתר? לוחצים, בוחרים את האתר, ומאשרים. השעה והמיקום (GPS) נרשמים אוטומטית.<br><br><b>🏁 סימון עזיבה:</b> בסוף העבודה באתר.<br><br>הנתונים נכנסים לדוח היומי — כולל קישור למפה של נקודת הסימון. זה דוח השעות שלכם, אל תשכחו לסמן!' },
   leads: { t:'קריאות מלקוחות', b:'לקוחות יכולים לפתוח קריאת שירות בעצמם דרך קישור ייעודי — בלי סיסמה ובלי גישה למערכת.<br><br>הפניות מגיעות לכאן, ממוינות לפי דחיפות. <b>✔ קליטה כקריאה</b> מכניסה אותן לרשימת הקריאות הרגילה לשיבוץ טכנאי.' },
   team: { t:'ניהול צוות וכניסות', b:'<b>הוספת עובד:</b> ＋ הוספה ← שם ותפקיד.<br><br><b>יצירת כניסה עם סיסמה:</b> לוחצים על העובד ← מזינים את האימייל האישי שלו (עדיף אמיתי, בשביל שחזור סיסמה) ← "🔑 צור כניסה" ← קובעים סיסמה ראשונית ← שולחים לו את הפרטים בוואטסאפ.<br><br>🔑 ליד שם = יש לו כניסה פעילה.<br><br><b>חסימת עובד:</b> דרך Firebase ← Authentication ← Users ← Disable.' },
+  presence: { t:'נוכחות ושעות', b:'כשטכנאי לוחץ <b>"📍 הגעתי לאתר"</b> על משימה או קריאה — נרשמים השעה ונקודת ה-GPS המדויקת. בסיום — <b>"🏁 סיום עבודה באתר"</b>.<br><br><b>איפה רואים:</b><br>• על הכרטיס עצמו — כל הרישומים עם קישור "מפה" לנקודה המדויקת<br>• בדוח היומי — סעיף נוכחות<br>• כאן — דוח מרוכז לפי עובד ותקופה, עם <b>חישוב שעות אוטומטי</b> ליום ולתקופה<br><br>⚠️ ברישום ללא סימון סיום — הדוח יסמן זאת, כדי שתדעו להשלים ידנית מול העובד.' },
   billing: { t:'צינור החיוב', b:'כל עבודה שמסתיימת — משימה שאושרה או קריאה שנסגרה — נכנסת אוטומטית למצב <b>💳 ממתין לחיוב</b>.<br><br><b>בדשבורד</b> (מנהלים): רשימת כל הממתינות. אחרי שהוצאתם חשבונית — "✓ חויב" (עם מספר חשבונית). עבודה באחריות או כלולה בחוזה — "ללא חיוב".<br><br><b>דוח החיוב</b> (לשונית דוחות): בוחרים טווח תאריכים ומקבלים את כל העבודות שהושלמו, מקובצות לפי לקוח, עם דיווחי הביצוע והכמויות — מוכן להנהלת חשבונות.<br><br>המנהלים מקבלים גם התראה במכשיר בכל פעם שטכנאי מסיים עבודה.' },
   notifs: { t:'התראות', b:'אחרי הפעלה, המכשיר יקפיץ התראה על כל <b>קריאת שירות חדשה</b> (כולל מטופס הלקוחות) ועל כל <b>משימה חדשה</b> שמישהו אחר פתח.<br><br><b>חשוב לדעת:</b> ההתראות מגיעות כשהאפליקציה פתוחה — גם ברקע או בטאב אחר. אם סגרתם אותה לגמרי, ההתראה תגיע ברגע שתפתחו שוב.<br><br>מפעילים פעם אחת בכל מכשיר. אם לחצתם "חסימה" בטעות — הגדרות הדפדפן ← התראות ← לאשר לאתר.' },
   perms: { t:'הרשאות במערכת', b:'<b>מנהלים</b> (אבישי, ליאל, הילה): הכל — כולל מחיקה, אישור בקשות, ניהול צוות ופרויקטים, גיבויים ויומן.<br><br><b>טכנאים וקבלנים:</b> פותחים ומעדכנים משימות וקריאות, מעלים תמונות, מדווחים ביצוע ומכירות, מבקשים למשוך — <b>אבל לא מוחקים כלום</b>.<br><br>הזיהוי לפי האימייל שאיתו נכנסתם — כל פעולה על שמכם.' }
@@ -1319,6 +1321,7 @@ function buildDailyReport(d){
 function renderReports(){
   if (!reportDate) reportDate = today();
   if (!billFrom){ billFrom = today().slice(0,8) + '01'; billTo = today(); }
+  if (!presFrom){ presFrom = today().slice(0,8) + '01'; presTo = today(); }
   const dailyRep = buildDailyReport(reportDate);
   const projRep = reportProj ? buildProjReport(reportProj) : '';
   const persRep = reportPerson ? buildPersonReport(reportPerson) : '';
@@ -1333,6 +1336,23 @@ function renderReports(){
       </div>
     </div>
     ${isAdmin()?`
+    <div class="card">
+      <div class="card-title">📍 דוח נוכחות ושעות ${helpBtn('presence')}</div>
+      <div class="form-2col">
+        <div><label style="display:block;font-size:12px;font-weight:700;color:#555B69;margin-bottom:4px">מתאריך</label><input type="date" value="${esc(presFrom)}" onchange="presFrom=this.value;render()"></div>
+        <div><label style="display:block;font-size:12px;font-weight:700;color:#555B69;margin-bottom:4px">עד תאריך</label><input type="date" value="${esc(presTo)}" onchange="presTo=this.value;render()"></div>
+      </div>
+      <label style="display:block;font-size:12px;font-weight:700;color:#555B69;margin:8px 0 4px">איש צוות</label>
+      <select onchange="presWho=this.value;render()">
+        <option value="">כל הצוות</option>
+        ${S.team.map(m=>`<option value="${esc(m.name)}"${presWho===m.name?' selected':''}>${esc(m.name)}</option>`).join('')}
+      </select>
+      <pre class="report-preview">${esc(buildPresenceReport(presFrom, presTo, presWho))}</pre>
+      <div class="form-actions">
+        <button class="btn-secondary" onclick="copyReport('presence')">📋 העתקה</button>
+        <button class="btn-primary" onclick="waReport('presence')">💬 שליחה בוואטסאפ</button>
+      </div>
+    </div>
     <div class="card">
       <div class="card-title">💳 דוח עבודות לחיוב ${helpBtn('billing')}</div>
       <div class="form-2col">
@@ -1371,11 +1391,11 @@ function renderReports(){
     </div>`;
 }
 function copyReport(kind){
-  const text = kind==='billing' ? buildBillingReport(billFrom, billTo) : kind==='daily' ? buildDailyReport(reportDate) : kind==='proj' ? buildProjReport(reportProj) : buildPersonReport(reportPerson);
+  const text = kind==='presence' ? buildPresenceReport(presFrom, presTo, presWho) : kind==='billing' ? buildBillingReport(billFrom, billTo) : kind==='daily' ? buildDailyReport(reportDate) : kind==='proj' ? buildProjReport(reportProj) : buildPersonReport(reportPerson);
   copyText(text); toastMsg('הועתק — אפשר להדביק בוואטסאפ');
 }
 function waReport(kind){
-  const text = kind==='billing' ? buildBillingReport(billFrom, billTo) : kind==='daily' ? buildDailyReport(reportDate) : kind==='proj' ? buildProjReport(reportProj) : buildPersonReport(reportPerson);
+  const text = kind==='presence' ? buildPresenceReport(presFrom, presTo, presWho) : kind==='billing' ? buildBillingReport(billFrom, billTo) : kind==='daily' ? buildDailyReport(reportDate) : kind==='proj' ? buildProjReport(reportProj) : buildPersonReport(reportPerson);
   window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
 }
 
@@ -1692,6 +1712,52 @@ function markNoCharge(kind, id){
   x.billing = { state: 'none', by: USER, d: today() };
   pushLog('➖ סימן ללא חיוב: ' + (kind==='task'?x.title:x.customer));
   persist(); render(); toastMsg('סומן ללא חיוב');
+}
+function fmtDur(mins){
+  if (mins == null || mins < 0) return '';
+  return Math.floor(mins/60) + ':' + String(mins%60).padStart(2,'0');
+}
+function toMins(t){ const [h,m] = (t||'0:0').split(':').map(Number); return h*60+m; }
+function buildPresenceReport(from, to, person){
+  const ev = [];
+  const add = (p, where) => { if (p.d >= from && p.d <= to && (!person || p.by === person)) ev.push({ by:p.by, type:p.type, d:p.d, t:p.t, where }); };
+  S.tasks.forEach(t => (t.presence||[]).forEach(p => add(p, projName(t.projectId) + (t.location ? ' · ' + t.location : ''))));
+  S.calls.forEach(c => (c.presence||[]).forEach(p => add(p, c.customer)));
+  let msg = `*דוח נוכחות ושעות*\n📅 ${fmtDate(from)} — ${fmtDate(to)}${person ? '\n👷 ' + person : ''}\n`;
+  if (!ev.length) return msg + '\nאין רישומי נוכחות בתקופה זו';
+  const byPerson = {};
+  ev.forEach(e => { (byPerson[e.by] = byPerson[e.by] || []).push(e); });
+  Object.entries(byPerson).forEach(([who, list]) => {
+    list.sort((a,b) => (a.d + a.t).localeCompare(b.d + b.t));
+    msg += `\n👷 *${who}*\n`;
+    const dayTotals = {};
+    let openIn = null;
+    list.forEach(e => {
+      if (e.type === 'in'){
+        if (openIn) msg += `▫️ ${fmtDate(openIn.d)} · ${openIn.where}: הגעה ${openIn.t} — ללא סימון סיום ⚠️\n`;
+        openIn = e;
+      } else {
+        if (openIn && openIn.d === e.d){
+          const dur = toMins(e.t) - toMins(openIn.t);
+          msg += `▫️ ${fmtDate(e.d)} · ${openIn.where}: ${openIn.t}–${e.t} (${fmtDur(dur)})\n`;
+          dayTotals[e.d] = (dayTotals[e.d] || 0) + Math.max(0, dur);
+          openIn = null;
+        } else {
+          msg += `▫️ ${fmtDate(e.d)} · ${e.where}: סיום ${e.t} (ללא סימון הגעה)\n`;
+        }
+      }
+    });
+    if (openIn) msg += `▫️ ${fmtDate(openIn.d)} · ${openIn.where}: הגעה ${openIn.t} — ללא סימון סיום ⚠️\n`;
+    const days = Object.keys(dayTotals);
+    if (days.length){
+      days.sort().forEach(dd => { msg += `   סה"כ ${fmtDate(dd)}: ${fmtDur(dayTotals[dd])} שעות\n`; });
+      const grand = days.reduce((s,dd)=>s+dayTotals[dd],0);
+      if (days.length > 1) msg += `   *סה"כ לתקופה: ${fmtDur(grand)} שעות*\n`;
+    }
+  });
+  msg += '\n📍 נקודות ה-GPS המדויקות זמינות על כרטיסי המשימות (כפתור "מפה")';
+  msg += '\n\n_VAS Security — ש.ו טכנולוגיות ביטחון_';
+  return msg;
 }
 function buildBillingReport(from, to){
   const inRange = d => d && d >= from && d <= to;
