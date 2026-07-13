@@ -205,6 +205,8 @@ const PHOTOS = db.collection('vas');
 
 const READONLY = new URLSearchParams(location.search).get('view') === '1';
 const ADMINS = ["אבישי","ליאל","הילה"];
+const HOURS_ADMINS = ["אבישי","הילה"];
+const isHoursAdmin = () => HOURS_ADMINS.includes(USER);
 let USER = localStorage.getItem('vas:user') || '';
 const isAdmin = () => ADMINS.includes(USER);
 function guardEdit(){
@@ -365,7 +367,7 @@ const HELP = {
   checkin: { t:'נוכחות — סימון הגעה ועזיבה', b:'<b>📍 סימון הגעה:</b> הגעתם לאתר? לוחצים, בוחרים את האתר, ומאשרים. השעה והמיקום (GPS) נרשמים אוטומטית.<br><br><b>🏁 סימון עזיבה:</b> בסוף העבודה באתר.<br><br>הנתונים נכנסים לדוח היומי — כולל קישור למפה של נקודת הסימון. זה דוח השעות שלכם, אל תשכחו לסמן!' },
   leads: { t:'קריאות מלקוחות', b:'לקוחות יכולים לפתוח קריאת שירות בעצמם דרך קישור ייעודי — בלי סיסמה ובלי גישה למערכת.<br><br>הפניות מגיעות לכאן, ממוינות לפי דחיפות. <b>✔ קליטה כקריאה</b> מכניסה אותן לרשימת הקריאות הרגילה לשיבוץ טכנאי.' },
   team: { t:'ניהול צוות וכניסות', b:'<b>הוספת עובד:</b> ＋ הוספה ← שם ותפקיד.<br><br><b>יצירת כניסה עם סיסמה:</b> לוחצים על העובד ← מזינים את האימייל האישי שלו (עדיף אמיתי, בשביל שחזור סיסמה) ← "🔑 צור כניסה" ← קובעים סיסמה ראשונית ← שולחים לו את הפרטים בוואטסאפ.<br><br>🔑 ליד שם = יש לו כניסה פעילה.<br><br><b>חסימת עובד:</b> דרך Firebase ← Authentication ← Users ← Disable.' },
-  presence: { t:'נוכחות ושעות', b:'כשטכנאי לוחץ <b>"📍 הגעתי לאתר"</b> על משימה או קריאה — נרשמים השעה ונקודת ה-GPS המדויקת. בסיום — <b>"🏁 סיום עבודה באתר"</b>.<br><br><b>איפה רואים:</b><br>• על הכרטיס עצמו — כל הרישומים עם קישור "מפה" לנקודה המדויקת<br>• בדוח היומי — סעיף נוכחות<br>• כאן — דוח מרוכז לפי עובד ותקופה, עם <b>חישוב שעות אוטומטי</b> ליום ולתקופה<br><br>⚠️ ברישום ללא סימון סיום — הדוח יסמן זאת, כדי שתדעו להשלים ידנית מול העובד.' },
+  presence: { t:'נוכחות ושעות', b:'כשלוחצים <b>"📍 הגעתי לאתר"</b> — נרשמות השעה ונקודת ה-GPS. בסיום — <b>"🏁 סיום עבודה באתר"</b>.<br><br><b>פרטיות:</b> כל עובד רואה על הכרטיסים <b>רק את הרישומים של עצמו</b>. דוח השעות המרוכז — עם חישוב שעות ליום ולתקופה, ואפשרות לדוח פר עובד — זמין לאבישי ולהילה בלבד.<br><br>⚠️ רישום הגעה בלי סימון סיום מסומן בדוח, כדי להשלים ידנית מול העובד.' },
   billing: { t:'צינור החיוב', b:'כל עבודה שמסתיימת — משימה שאושרה או קריאה שנסגרה — נכנסת אוטומטית למצב <b>💳 ממתין לחיוב</b>.<br><br><b>בדשבורד</b> (מנהלים): רשימת כל הממתינות. אחרי שהוצאתם חשבונית — "✓ חויב" (עם מספר חשבונית). עבודה באחריות או כלולה בחוזה — "ללא חיוב".<br><br><b>דוח החיוב</b> (לשונית דוחות): בוחרים טווח תאריכים ומקבלים את כל העבודות שהושלמו, מקובצות לפי לקוח, עם דיווחי הביצוע והכמויות — מוכן להנהלת חשבונות.<br><br>המנהלים מקבלים גם התראה במכשיר בכל פעם שטכנאי מסיים עבודה.' },
   notifs: { t:'התראות', b:'אחרי הפעלה, המכשיר יקפיץ התראה על כל <b>קריאת שירות חדשה</b> (כולל מטופס הלקוחות) ועל כל <b>משימה חדשה</b> שמישהו אחר פתח.<br><br><b>חשוב לדעת:</b> ההתראות מגיעות כשהאפליקציה פתוחה — גם ברקע או בטאב אחר. אם סגרתם אותה לגמרי, ההתראה תגיע ברגע שתפתחו שוב.<br><br>מפעילים פעם אחת בכל מכשיר. אם לחצתם "חסימה" בטעות — הגדרות הדפדפן ← התראות ← לאשר לאתר.' },
   perms: { t:'הרשאות במערכת', b:'<b>מנהלים</b> (אבישי, ליאל, הילה): הכל — כולל מחיקה, אישור בקשות, ניהול צוות ופרויקטים, גיבויים ויומן.<br><br><b>טכנאים וקבלנים:</b> פותחים ומעדכנים משימות וקריאות, מעלים תמונות, מדווחים ביצוע ומכירות, מבקשים למשוך — <b>אבל לא מוחקים כלום</b>.<br><br>הזיהוי לפי האימייל שאיתו נכנסתם — כל פעולה על שמכם.' }
@@ -1305,7 +1307,7 @@ function buildDailyReport(d){
   const pres = [];
   S.tasks.forEach(t => (t.presence||[]).forEach(p => { if (p.d === d) pres.push({ by:p.by, type:p.type, t:p.t, where: projName(t.projectId) + (t.location ? ' · ' + t.location : '') }); }));
   S.calls.forEach(c => (c.presence||[]).forEach(p => { if (p.d === d) pres.push({ by:p.by, type:p.type, t:p.t, where: c.customer }); }));
-  if (pres.length){
+  if (pres.length && isHoursAdmin()){
     msg += `\n📍 *נוכחות באתרים:*\n`;
     pres.sort((a,b)=>a.t.localeCompare(b.t)).forEach(p => { msg += `▫️ ${p.by} — ${p.type==='in'?'הגעה':'סיום'} ${p.t} · ${p.where}\n`; });
   }
@@ -1335,7 +1337,7 @@ function renderReports(){
         <button class="btn-primary" onclick="waReport('daily')">💬 שליחה בוואטסאפ</button>
       </div>
     </div>
-    ${isAdmin()?`
+    ${isHoursAdmin()?`
     <div class="card">
       <div class="card-title">📍 דוח נוכחות ושעות ${helpBtn('presence')}</div>
       <div class="form-2col">
@@ -1353,6 +1355,7 @@ function renderReports(){
         <button class="btn-primary" onclick="waReport('presence')">💬 שליחה בוואטסאפ</button>
       </div>
     </div>
+    `:''}${isAdmin()?`
     <div class="card">
       <div class="card-title">💳 דוח עבודות לחיוב ${helpBtn('billing')}</div>
       <div class="form-2col">
@@ -1647,9 +1650,10 @@ function applyReport(kind, id, nextStatus, skip){
 }
 function presenceBlock(kind, x){
   let h = '';
-  if (x.presence && x.presence.length){
+  const visiblePres = (x.presence || []).filter(p => isHoursAdmin() || p.by === USER);
+  if (visiblePres.length){
     h += `<div class="task-notes" style="background:#F3EFFA;color:#5B3E8E">` +
-      x.presence.map(p=>`📍 ${esc(p.by)} ${p.type==='in'?'הגיע':'סיים'} ${esc(p.d===today()?'':fmtDate(p.d)+' ')}${esc(p.t)} <a href="https://maps.google.com/?q=${p.lat},${p.lng}" target="_blank" style="color:#5B3E8E;font-weight:800;text-decoration:underline">מפה</a>`).join('<br>') +
+      visiblePres.map(p=>`📍 ${esc(p.by)} ${p.type==='in'?'הגיע':'סיים'} ${esc(p.d===today()?'':fmtDate(p.d)+' ')}${esc(p.t)} <a href="https://maps.google.com/?q=${p.lat},${p.lng}" target="_blank" style="color:#5B3E8E;font-weight:800;text-decoration:underline">מפה</a>`).join('<br>') +
       `</div>`;
   }
   const final = kind==='task' ? ['בוצע','אושר'].includes(x.status) : x.status==='נסגרה';
@@ -1719,6 +1723,7 @@ function fmtDur(mins){
 }
 function toMins(t){ const [h,m] = (t||'0:0').split(':').map(Number); return h*60+m; }
 function buildPresenceReport(from, to, person){
+  if (!isHoursAdmin()) return 'דוח נוכחות זמין לאבישי והילה בלבד';
   const ev = [];
   const add = (p, where) => { if (p.d >= from && p.d <= to && (!person || p.by === person)) ev.push({ by:p.by, type:p.type, d:p.d, t:p.t, where }); };
   S.tasks.forEach(t => (t.presence||[]).forEach(p => add(p, projName(t.projectId) + (t.location ? ' · ' + t.location : ''))));
