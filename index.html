@@ -260,6 +260,7 @@ let callsShowClosed = false;
 let reportProj = '', reportPerson = '', reportDate = '';
 let billFrom = '', billTo = '';
 let presFrom = '', presTo = '', presWho = '';
+let taskSearch = '', callSearch = '';
 const photoCache = {};
 
 const uid = () => Math.random().toString(36).slice(2,9) + Date.now().toString(36).slice(-4);
@@ -368,6 +369,7 @@ const HELP = {
   leads: { t:'קריאות מלקוחות', b:'לקוחות יכולים לפתוח קריאת שירות בעצמם דרך קישור ייעודי — בלי סיסמה ובלי גישה למערכת.<br><br>הפניות מגיעות לכאן, ממוינות לפי דחיפות. <b>✔ קליטה כקריאה</b> מכניסה אותן לרשימת הקריאות הרגילה לשיבוץ טכנאי.' },
   team: { t:'ניהול צוות וכניסות', b:'<b>הוספת עובד:</b> ＋ הוספה ← שם ותפקיד.<br><br><b>יצירת כניסה עם סיסמה:</b> לוחצים על העובד ← מזינים את האימייל האישי שלו (עדיף אמיתי, בשביל שחזור סיסמה) ← "🔑 צור כניסה" ← קובעים סיסמה ראשונית ← שולחים לו את הפרטים בוואטסאפ.<br><br>🔑 ליד שם = יש לו כניסה פעילה.<br><br><b>חסימת עובד:</b> דרך Firebase ← Authentication ← Users ← Disable.' },
   presence: { t:'נוכחות ושעות', b:'כשלוחצים <b>"📍 הגעתי לאתר"</b> — נרשמות השעה ונקודת ה-GPS. בסיום — <b>"🏁 סיום עבודה באתר"</b>.<br><br><b>פרטיות:</b> כל עובד רואה על הכרטיסים <b>רק את הרישומים של עצמו</b>. דוח השעות המרוכז — עם חישוב שעות ליום ולתקופה, ואפשרות לדוח פר עובד — זמין לאבישי ולהילה בלבד.<br><br>⚠️ רישום הגעה בלי סימון סיום מסומן בדוח, כדי להשלים ידנית מול העובד.' },
+  recurring: { t:'משימות חוזרות', b:'משימות שחוזרות במחזוריות קבועה — בדיקת גלאים רבעונית, אחזקה חודשית — נוצרות <b>אוטומטית</b> במועד, בלי לזכור.<br><br>מגדירים פעם אחת: מה, איפה, מי אחראי, כל כמה ימים ומתי הפעם הראשונה. במועד — נוצרת משימה רגילה עם תאריך יעד, מסומנת 🔁, והמועד הבא מתקדם לבד.<br><br>ניהול למנהלים בלבד.' },
   billing: { t:'צינור החיוב', b:'כל עבודה שמסתיימת — משימה שאושרה או קריאה שנסגרה — נכנסת אוטומטית למצב <b>💳 ממתין לחיוב</b>.<br><br><b>בדשבורד</b> (מנהלים): רשימת כל הממתינות. אחרי שהוצאתם חשבונית — "✓ חויב" (עם מספר חשבונית). עבודה באחריות או כלולה בחוזה — "ללא חיוב".<br><br><b>דוח החיוב</b> (לשונית דוחות): בוחרים טווח תאריכים ומקבלים את כל העבודות שהושלמו, מקובצות לפי לקוח, עם דיווחי הביצוע והכמויות — מוכן להנהלת חשבונות.<br><br>המנהלים מקבלים גם התראה במכשיר בכל פעם שטכנאי מסיים עבודה.' },
   notifs: { t:'התראות', b:'אחרי הפעלה, המכשיר יקפיץ התראה על כל <b>קריאת שירות חדשה</b> (כולל מטופס הלקוחות) ועל כל <b>משימה חדשה</b> שמישהו אחר פתח.<br><br><b>חשוב לדעת:</b> ההתראות מגיעות כשהאפליקציה פתוחה — גם ברקע או בטאב אחר. אם סגרתם אותה לגמרי, ההתראה תגיע ברגע שתפתחו שוב.<br><br>מפעילים פעם אחת בכל מכשיר. אם לחצתם "חסימה" בטעות — הגדרות הדפדפן ← התראות ← לאשר לאתר.' },
   perms: { t:'הרשאות במערכת', b:'<b>מנהלים</b> (אבישי, ליאל, הילה): הכל — כולל מחיקה, אישור בקשות, ניהול צוות ופרויקטים, גיבויים ויומן.<br><br><b>טכנאים וקבלנים:</b> פותחים ומעדכנים משימות וקריאות, מעלים תמונות, מדווחים ביצוע ומכירות, מבקשים למשוך — <b>אבל לא מוחקים כלום</b>.<br><br>הזיהוי לפי האימייל שאיתו נכנסתם — כל פעולה על שמכם.' }
@@ -563,6 +565,7 @@ function startData(){
   if (snap.exists && !snap.metadata.hasPendingWrites) serverState = JSON.stringify(S);
   bindUserFromAuth();
   maybeNotifyNew();
+  processRecurring();
   render();
   if (!READONLY && authUser && !USER){
     if (!S.team.some(t => t.email)){ if (!document.querySelector('.modal-overlay')) showBootstrapModal(); }
@@ -863,7 +866,9 @@ function kpiGo(kind){
 /* ---------- Tasks ---------- */
 function setFilter(k,v){ filters[k]=v; filters.special=null; render(); }
 function filteredTasks(){
+  const q = taskSearch.trim();
   return S.tasks.filter(t=>{
+    if (q && !((t.title||'') + ' ' + (t.location||'') + ' ' + (t.assignee||'') + ' ' + (t.notes||'') + ' ' + (t.report||'') + ' ' + projName(t.projectId)).includes(q)) return false;
     if (filters.proj!=='all' && t.projectId!==filters.proj) return false;
     if (filters.status==='open' && t.status==='אושר') return false;
     if (filters.status!=='all' && filters.status!=='open' && t.status!==filters.status) return false;
@@ -876,6 +881,7 @@ function filteredTasks(){
 function renderTasks(){
   const list = filteredTasks();
   return `
+    <input value="${esc(taskSearch)}" oninput="taskSearch=this.value;render();this.focus();this.setSelectionRange(this.value.length,this.value.length)" placeholder="🔎 חיפוש משימה, מיקום, טכנאי…" style="width:100%;padding:10px 12px;border:1.5px solid #E2DFD5;border-radius:10px;font-family:inherit;font-size:14px;background:#fff;margin-bottom:10px">
     <div class="filter-row" style="align-items:center">
       ${helpBtn('tasks')}
       <select onchange="setFilter('proj',this.value)">
@@ -920,6 +926,7 @@ function taskCard(t){
       ${mediaStrip(taskMedia(t))}
       ${claimBlock('task', t)}
       ${presenceBlock('task', t)}
+      ${t.signId?`<div class="task-actions"><button class="btn-tiny" style="background:#EFF7F0;color:#2C6E48" onclick="openPhoto('${t.signId}')">✍️ חתימת לקוח${t.signName?`: ${esc(t.signName)}`:''}</button></div>`:''}
       ${billingBlock('task', t)}
     </div>`;
 }
@@ -930,7 +937,7 @@ function cycleTaskStatus(id){
   if (nextT === 'בוצע'){ openReportModal('task', id, nextT); return; }
   t.status = nextT;
   t.updatedBy = USER; t.updatedAt = today();
-  if (t.status === 'אושר'){ t.closedBy = USER; t.closedAt = today(); }
+  if (t.status === 'אושר'){ t.closedBy = USER; t.closedAt = today(); t.closedTime = nowTime(); }
   else { t.closedBy = ''; t.closedAt = ''; }
   pushLog('עדכן סטטוס "' + t.title + '" ל-' + t.status);
   persist(); render(); toastMsg('סטטוס עודכן: '+t.status);
@@ -1027,7 +1034,7 @@ async function saveTask(id){
   if (t.upsell && t.upsell !== prevUpsT) pushLog('💰 מכירה נוספת: ' + t.upsell);
   t.updatedBy = USER; t.updatedAt = today();
   if (!id) t.createdBy = USER;
-  if (t.status === 'אושר'){ if (!t.closedBy){ t.closedBy = USER; t.closedAt = today(); } }
+  if (t.status === 'אושר'){ if (!t.closedBy){ t.closedBy = USER; t.closedAt = today(); t.closedTime = nowTime(); } }
   else { t.closedBy = ''; t.closedAt = ''; }
   pushLog((id?'עדכן':'פתח') + ' משימה: ' + t.title);
 
@@ -1060,13 +1067,15 @@ async function deleteTask(id){
 
 /* ---------- Service calls ---------- */
 function renderCalls(){
-  const list = S.calls.filter(c=>callsShowClosed || c.status!=='נסגרה')
+  const qc = callSearch.trim();
+  const list = S.calls.filter(c=>(callsShowClosed || c.status!=='נסגרה') && (!qc || ((c.customer||'') + ' ' + (c.desc||'') + ' ' + (c.phone||'') + ' ' + (c.technician||'') + ' ' + (c.notes||'')).includes(qc)))
     .sort((a,b)=>{
       const ac = a.status==='נסגרה'?1:0, bc = b.status==='נסגרה'?1:0;
       if (ac!==bc) return ac-bc;
       return URGENCIES.indexOf(a.urgency)-URGENCIES.indexOf(b.urgency);
     });
   return `
+    <input value="${esc(callSearch)}" oninput="callSearch=this.value;render();this.focus();this.setSelectionRange(this.value.length,this.value.length)" placeholder="🔎 חיפוש לקוח, תקלה, טלפון…" style="width:100%;padding:10px 12px;border:1.5px solid #E2DFD5;border-radius:10px;font-family:inherit;font-size:14px;background:#fff;margin-bottom:10px">
     <label class="toggle-row"><input type="checkbox" ${callsShowClosed?'checked':''} onchange="callsShowClosed=this.checked;render()"> הצג גם קריאות סגורות ${helpBtn('calls')}</label>
     ${list.length===0 ? '<div class="card empty">אין קריאות שירות</div>' : list.map(c=>`
       <div class="task-card" style="border-inline-start-color:${URGENCY_COLORS[c.urgency]||'#8A8F9C'}">
@@ -1079,6 +1088,7 @@ function renderCalls(){
           ${c.technician?`<span>👷 ${esc(c.technician)}</span>`:''}
           <span>⚡ ${esc(c.urgency)}</span>
           <span>📅 ${fmtDate(c.created)}${c.createdTime?` · ${esc(c.createdTime)}`:''}</span>
+          ${slaBadge(c)}
           ${c.createdBy?`<span>👤 ${esc(c.createdBy)}</span>`:''}
           ${c.closedBy?`<span>🔒 ${esc(c.closedBy)}</span>`:''}
         </div>
@@ -1090,6 +1100,7 @@ function renderCalls(){
         ${mediaStrip(c.media)}
         ${claimBlock('call', c)}
         ${presenceBlock('call', c)}
+        ${c.signId?`<div class="task-actions"><button class="btn-tiny" style="background:#EFF7F0;color:#2C6E48" onclick="openPhoto('${c.signId}')">✍️ חתימת לקוח${c.signName?`: ${esc(c.signName)}`:''}</button></div>`:''}
         ${billingBlock('call', c)}
       </div>`).join('')}
     ${READONLY?'':'<button class="fab" onclick="openCallForm()">＋ קריאה חדשה</button>'}`;
@@ -1101,7 +1112,7 @@ function cycleCallStatus(id){
   if (nextC === 'נסגרה'){ openReportModal('call', id, nextC); return; }
   c.status = nextC;
   c.updatedBy = USER; c.updatedAt = today();
-  if (c.status === 'נסגרה'){ c.closedBy = USER; c.closedAt = today(); }
+  if (c.status === 'נסגרה'){ c.closedBy = USER; c.closedAt = today(); c.closedTime = nowTime(); }
   else { c.closedBy = ''; c.closedAt = ''; }
   pushLog('עדכן קריאה "' + c.customer + '" ל-' + c.status);
   persist(); render(); toastMsg('סטטוס: '+c.status);
@@ -1182,7 +1193,7 @@ async function saveCall(id){
   c.updatedBy = USER; c.updatedAt = today();
   if (!id) c.createdBy = USER;
   pushLog((id?'עדכן':'פתח') + ' קריאה: ' + c.customer);
-  if (c.status === 'נסגרה'){ if (!c.closedBy){ c.closedBy = USER; c.closedAt = today(); } }
+  if (c.status === 'נסגרה'){ if (!c.closedBy){ c.closedBy = USER; c.closedAt = today(); c.closedTime = nowTime(); } }
   else { c.closedBy = ''; c.closedAt = ''; }
   toastMsg('שומר…');
   const cMedia = [];
@@ -1265,6 +1276,8 @@ function buildDailyReport(d){
     if (t.updatedBy) msg += ` — ${t.updatedBy}`;
     msg += `\n`;
   });
+  const durs = doneC.map(c => minutesBetween(c.created, c.createdTime, c.closedAt, c.closedTime)).filter(x => x != null);
+  if (durs.length) msg += `⏱️ זמן תגובה ממוצע לקריאות שנסגרו: ${fmtAge(Math.round(durs.reduce((s,x)=>s+x,0) / durs.length))}\n`;
   doneC.forEach(c => {
     msg += `🛠️ קריאה: ${c.customer} — ${c.desc}`;
     if (c.report) msg += ` | ${c.report}`;
@@ -1346,7 +1359,8 @@ function renderReports(){
       <pre class="report-preview">${esc(buildPresenceReport(presFrom, presTo, presWho))}</pre>
       <div class="form-actions">
         <button class="btn-secondary" onclick="copyReport('presence')">📋 העתקה</button>
-        <button class="btn-primary" onclick="waReport('presence')">💬 שליחה בוואטסאפ</button>
+        <button class="btn-secondary" onclick="exportPresenceXlsx()">📊 אקסל</button>
+        <button class="btn-primary" onclick="waReport('presence')">💬 וואטסאפ</button>
       </div>
     </div>
     `:''}${isAdmin()?`
@@ -1359,7 +1373,8 @@ function renderReports(){
       <pre class="report-preview">${esc(buildBillingReport(billFrom, billTo))}</pre>
       <div class="form-actions">
         <button class="btn-secondary" onclick="copyReport('billing')">📋 העתקה</button>
-        <button class="btn-primary" onclick="waReport('billing')">💬 שליחה בוואטסאפ</button>
+        <button class="btn-secondary" onclick="exportBillingXlsx()">📊 אקסל</button>
+        <button class="btn-primary" onclick="waReport('billing')">💬 וואטסאפ</button>
       </div>
     </div>`:''}
     <div class="card">
@@ -1439,6 +1454,15 @@ function renderSettings(){
             <div class="settings-sub">${esc(m.role)}${m.email?` · 🔑 יש כניסה`:''}</div></div>
           </div>`).join('')}`).join('')}
     </div>
+    ${isAdmin()?`
+    <div class="card">
+      <div class="card-title">🔁 משימות חוזרות ${helpBtn('recurring')} <button class="btn-mini" onclick="openRecForm()">＋ הוספה</button></div>
+      ${(S.recurring&&S.recurring.length)?S.recurring.map(r=>`
+        <div class="settings-row" onclick="openRecForm('${r.id}')">
+          <div><div class="settings-name">${esc(r.title)}</div>
+          <div class="settings-sub">${esc(projName(r.projectId))} · כל ${r.everyDays} ימים · הבאה: ${fmtDate(r.nextDue)}</div></div>
+        </div>`).join(''):'<div class="empty">אין משימות חוזרות — לדוגמה: בדיקת גלאים רבעונית</div>'}
+    </div>`:''}
     <div class="card">
       <div class="card-title">גיבוי ושחזור ${helpBtn('backup')}</div>
       <div class="form-actions" style="margin-top:4px">
@@ -1620,27 +1644,95 @@ function openReportModal(kind, id, nextStatus){
     <textarea id="rp_text" rows="3" placeholder="לדוגמה: הותקנו נקודות בקומה 3, הוחלף גלאי, בוצעו בדיקות">${esc(x.report||'')}</textarea>
     <label>כמות</label>
     <input id="rp_qty" value="${esc(x.qty||'')}" placeholder="12 נקודות / 3 מצלמות / יחידה 1">
+    <label>✍️ חתימת לקוח (לא חובה)</label>
+    <input id="rp_signname" value="" placeholder="שם החותם" style="margin-bottom:8px">
+    <canvas id="rp_sign" width="640" height="240" style="width:100%;height:130px;border:1.5px dashed #C9962E;border-radius:10px;background:#fff;touch-action:none"></canvas>
+    <div class="task-actions" style="margin-top:6px"><button class="btn-tiny" onclick="clearSign()">✕ ניקוי חתימה</button></div>
     <div class="form-actions">
       <button class="btn-secondary" onclick="applyReport('${kind}','${id}','${esc(nextStatus)}',true)">דילוג</button>
       <button class="btn-primary" onclick="applyReport('${kind}','${id}','${esc(nextStatus)}',false)">שמירה וסגירה ✓</button>
     </div>`);
+  initSignPad();
 }
-function applyReport(kind, id, nextStatus, skip){
+let signDirty = false;
+function initSignPad(){
+  const cv = document.getElementById('rp_sign'); if (!cv || !cv.getContext) return;
+  const ctx = cv.getContext('2d');
+  ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.strokeStyle = '#1B1F2A';
+  signDirty = false;
+  let drawing = false;
+  const pos = e => {
+    const r = cv.getBoundingClientRect();
+    const p = e.touches ? e.touches[0] : e;
+    return { x: (p.clientX - r.left) * (cv.width / r.width), y: (p.clientY - r.top) * (cv.height / r.height) };
+  };
+  const start = e => { drawing = true; signDirty = true; const p = pos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); e.preventDefault(); };
+  const move = e => { if (!drawing) return; const p = pos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); e.preventDefault(); };
+  const end = () => { drawing = false; };
+  cv.addEventListener('mousedown', start); cv.addEventListener('mousemove', move); window.addEventListener('mouseup', end);
+  cv.addEventListener('touchstart', start, { passive: false }); cv.addEventListener('touchmove', move, { passive: false }); cv.addEventListener('touchend', end);
+}
+function clearSign(){
+  const cv = document.getElementById('rp_sign'); if (!cv || !cv.getContext) return;
+  cv.getContext('2d').clearRect(0, 0, cv.width, cv.height);
+  signDirty = false;
+}
+async function applyReport(kind, id, nextStatus, skip){
   const arr = kind === 'task' ? S.tasks : S.calls;
   const x = arr.find(i=>i.id===id); if (!x) return;
   if (!skip){
     x.report = (document.getElementById('rp_text')||{value:''}).value.trim();
     x.qty = (document.getElementById('rp_qty')||{value:''}).value.trim();
+    const cv = document.getElementById('rp_sign');
+    if (cv && cv.getContext && signDirty){
+      try {
+        const sid = 'sg_' + uid();
+        await savePhotoDoc(sid, cv.toDataURL('image/png'));
+        x.signId = sid;
+        x.signName = (document.getElementById('rp_signname')||{value:''}).value.trim();
+        pushLog('✍️ החתים לקוח' + (x.signName ? ' (' + x.signName + ')' : '') + ': ' + (kind==='task'?x.title:x.customer));
+      } catch(e){ toastMsg('שגיאה בשמירת החתימה'); }
+    }
   }
   x.status = nextStatus;
   x.updatedBy = USER; x.updatedAt = today();
   if (kind === 'task'){
-    if (x.status === 'אושר'){ x.closedBy = USER; x.closedAt = today(); } else { x.closedBy = ''; x.closedAt = ''; }
+    if (x.status === 'אושר'){ x.closedBy = USER; x.closedAt = today(); x.closedTime = nowTime(); } else { x.closedBy = ''; x.closedAt = ''; x.closedTime = ''; }
   } else {
-    if (x.status === 'נסגרה'){ x.closedBy = USER; x.closedAt = today(); } else { x.closedBy = ''; x.closedAt = ''; }
+    if (x.status === 'נסגרה'){ x.closedBy = USER; x.closedAt = today(); x.closedTime = nowTime(); } else { x.closedBy = ''; x.closedAt = ''; x.closedTime = ''; }
   }
   pushLog('עדכן סטטוס "' + (kind==='task'?x.title:x.customer) + '" ל-' + nextStatus + (x.report && !skip ? ' · דיווח: ' + x.report.slice(0,60) : ''));
   closeModal(); persist(); render(); toastMsg('סטטוס עודכן: ' + nextStatus);
+}
+const SLA_HOURS = { 'דחוף': 2, 'גבוה': 8, 'רגיל': 24, 'נמוך': 48 };
+function minutesSince(d, t){
+  if (!d) return null;
+  const dt = new Date(d + 'T' + (t || '00:00') + ':00');
+  return Math.max(0, Math.round((Date.now() - dt.getTime()) / 60000));
+}
+function minutesBetween(d1, t1, d2, t2){
+  if (!d1 || !d2) return null;
+  const a = new Date(d1 + 'T' + (t1 || '00:00') + ':00');
+  const b = new Date(d2 + 'T' + (t2 || '00:00') + ':00');
+  return Math.max(0, Math.round((b - a) / 60000));
+}
+function fmtAge(mins){
+  if (mins == null) return '';
+  if (mins < 60) return mins + ' דק׳';
+  const h = Math.floor(mins / 60), m = mins % 60;
+  if (h < 24) return h + ':' + String(m).padStart(2,'0') + ' שע׳';
+  return Math.floor(h / 24) + ' ימים ' + (h % 24) + ' שע׳';
+}
+function slaBadge(c){
+  if (c.status === 'נסגרה'){
+    const dur = minutesBetween(c.created, c.createdTime, c.closedAt, c.closedTime);
+    return dur != null ? `<span style="color:#3E8E5A;font-weight:700">⏱️ טופלה תוך ${fmtAge(dur)}</span>` : '';
+  }
+  const age = minutesSince(c.created, c.createdTime);
+  if (age == null) return '';
+  const limit = (SLA_HOURS[c.urgency] || 24) * 60;
+  const over = age > limit;
+  return `<span style="color:${over ? '#D64545' : '#6B7080'};font-weight:${over ? '800' : '600'}">⏱️ פתוחה ${fmtAge(age)}${over ? ' ⚠️' : ''}</span>`;
 }
 function presenceBlock(kind, x){
   let h = '';
@@ -1680,6 +1772,85 @@ function markPresence(kind, id){
   }, err => {
     toastMsg(err && err.code === 1 ? 'הדפדפן חסם מיקום — אשרו הרשאת מיקום לאתר' : 'לא הצלחנו לאתר מיקום — נסו שוב');
   }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 });
+}
+function addDays(dateStr, n){
+  const d = new Date(dateStr + 'T12:00:00');
+  d.setDate(d.getDate() + n);
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+let recProcessing = false;
+async function processRecurring(){
+  if (!isAdmin() || recProcessing || !S || !S.recurring || !S.recurring.length) return;
+  const due = S.recurring.filter(r => r.nextDue && r.nextDue <= today());
+  if (!due.length) return;
+  recProcessing = true;
+  try {
+    due.forEach(r => {
+      S.tasks.unshift({
+        id: uid(), created: today(), createdTime: nowTime(),
+        projectId: r.projectId, title: r.title, location: r.location || '',
+        discipline: r.discipline || 'כללי', assignee: r.assignee || '',
+        urgency: r.urgency || 'רגיל', status: 'פתוח', due: r.nextDue,
+        notes: '🔁 משימה מחזורית (כל ' + r.everyDays + ' ימים)', createdBy: 'מערכת 🔁'
+      });
+      pushLog('🔁 נוצרה משימה מחזורית: ' + r.title);
+      while (r.nextDue <= today()) r.nextDue = addDays(r.nextDue, r.everyDays);
+    });
+    await persist();
+    toastMsg('🔁 נוצרו ' + due.length + ' משימות מחזוריות');
+  } finally { recProcessing = false; }
+}
+function openRecForm(id){
+  if (!isAdmin()){ toastMsg('משימות חוזרות למנהלים בלבד'); return; }
+  const r = id ? (S.recurring||[]).find(x=>x.id===id) : null;
+  const f = r || { title:'', projectId:(S.projects.find(p=>p.active)||{}).id||'', location:'', discipline:'כללי', assignee:'', urgency:'רגיל', everyDays:90, nextDue:today() };
+  modalShell(r?'עריכת משימה חוזרת':'משימה חוזרת חדשה', `
+    <label>תיאור המשימה *</label>
+    <input id="rf_title" value="${esc(f.title)}" placeholder="בדיקת גלאים תקופתית">
+    <label>פרויקט</label>
+    <select id="rf_proj">${S.projects.filter(p=>p.active).map(p=>`<option value="${p.id}"${f.projectId===p.id?' selected':''}>${esc(p.name)}</option>`).join('')}</select>
+    <label>מיקום</label>
+    <input id="rf_loc" value="${esc(f.location||'')}">
+    <div class="form-2col">
+      <div><label>אחראי</label>
+        <select id="rf_assignee"><option value="">— לא שובץ —</option>${S.team.map(m=>`<option value="${esc(m.name)}"${f.assignee===m.name?' selected':''}>${esc(m.name)}</option>`).join('')}</select></div>
+      <div><label>דחיפות</label>
+        <select id="rf_urg">${URGENCIES.map(u=>`<option${f.urgency===u?' selected':''}>${u}</option>`).join('')}</select></div>
+    </div>
+    <div class="form-2col">
+      <div><label>חוזרת כל (ימים) *</label>
+        <input id="rf_days" inputmode="numeric" value="${esc(String(f.everyDays))}" placeholder="90"></div>
+      <div><label>מועד הבא *</label>
+        <input id="rf_next" type="date" value="${esc(f.nextDue)}"></div>
+    </div>
+    <div class="form-actions">
+      ${r?`<button class="btn-danger" onclick="deleteRec('${r.id}')">מחיקה</button>`:''}
+      <button class="btn-primary" onclick="saveRec('${r?r.id:''}')">שמירה</button>
+    </div>`);
+}
+async function saveRec(id){
+  const title = document.getElementById('rf_title').value.trim();
+  const days = parseInt(document.getElementById('rf_days').value, 10);
+  const next = document.getElementById('rf_next').value;
+  if (!title || !days || days < 1 || !next){ toastMsg('חסרים תיאור, מחזוריות או מועד'); return; }
+  S.recurring = S.recurring || [];
+  const r = id ? S.recurring.find(x=>x.id===id) : { id: uid() };
+  r.title = title;
+  r.projectId = document.getElementById('rf_proj').value;
+  r.location = document.getElementById('rf_loc').value.trim();
+  r.assignee = document.getElementById('rf_assignee').value;
+  r.urgency = document.getElementById('rf_urg').value;
+  r.everyDays = days;
+  r.nextDue = next;
+  if (!id) S.recurring.push(r);
+  pushLog('🔁 ' + (id?'עדכן':'יצר') + ' משימה חוזרת: ' + title);
+  await persist(); closeModal(); render(); toastMsg('נשמר ✓');
+}
+async function deleteRec(id){
+  if (!confirm('למחוק את המשימה החוזרת? (משימות שכבר נוצרו ממנה יישארו)')) return;
+  S.recurring = (S.recurring||[]).filter(x=>x.id!==id);
+  pushLog('🔁 מחק משימה חוזרת');
+  await persist(); closeModal(); render(); toastMsg('נמחקה');
 }
 function billingBlock(kind, x){
   const final = kind === 'task' ? ['בוצע','אושר'].includes(x.status) : x.status === 'נסגרה';
@@ -1758,16 +1929,84 @@ function buildPresenceReport(from, to, person){
   msg += '\n\n_VAS Security — ש.ו טכנולוגיות ביטחון_';
   return msg;
 }
+function withXLSX(cb){
+  if (window.XLSX){ cb(); return; }
+  toastMsg('טוען מודול אקסל…');
+  const s = document.createElement('script');
+  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+  s.onload = cb;
+  s.onerror = () => toastMsg('לא ניתן לטעון את מודול האקסל — בדקו חיבור');
+  document.body.appendChild(s);
+}
+function downloadXlsx(aoa, sheetName, fileName){
+  withXLSX(() => {
+    const wb = XLSX.utils.book_new();
+    wb.Workbook = { Views: [{ RTL: true }] };
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = aoa[0].map((_, i) => ({ wch: Math.min(40, Math.max(10, ...aoa.map(r => String(r[i] == null ? '' : r[i]).length + 2))) }));
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    XLSX.writeFile(wb, fileName);
+    toastMsg('קובץ האקסל ירד ✓');
+  });
+}
+function exportBillingXlsx(){
+  if (!isAdmin()){ toastMsg('למנהלים בלבד'); return; }
+  const from = billFrom, to = billTo;
+  const inRange = d => d && d >= from && d <= to;
+  const rows = [['לקוח/פרויקט','תאריך','עבודה','דיווח ביצוע','כמות','בוצע ע"י','סטטוס חיוב','חשבונית','חתימת לקוח']];
+  const push = (cust, d, what, repp, qty, by, bill, sign) => rows.push([
+    cust, fmtDate(d), what, repp, qty, by,
+    bill ? (bill.state === 'billed' ? 'חויב' : 'ללא חיוב') : 'ממתין לחיוב',
+    bill && bill.inv ? bill.inv : '', sign ? 'כן' : ''
+  ]);
+  S.tasks.forEach(t => { if ((t.status==='בוצע'||t.status==='אושר') && inRange(t.closedAt||t.updatedAt)) push(projName(t.projectId), t.closedAt||t.updatedAt, t.title + (t.location?' ('+t.location+')':''), t.report||'', t.qty||'', t.closedBy||t.updatedBy||'', t.billing, !!t.signId); });
+  S.calls.forEach(c => { if (c.status==='נסגרה' && inRange(c.closedAt||c.updatedAt)) push(c.customer, c.closedAt||c.updatedAt, c.desc, c.report||'', c.qty||'', c.closedBy||c.updatedBy||'', c.billing, !!c.signId); });
+  if (rows.length === 1){ toastMsg('אין עבודות בתקופה'); return; }
+  downloadXlsx(rows, 'חיוב', 'vas-billing-' + from + '-to-' + to + '.xlsx');
+}
+function exportPresenceXlsx(){
+  if (!isHoursAdmin()){ toastMsg('לאבישי והילה בלבד'); return; }
+  const from = presFrom, to = presTo, person = presWho;
+  const ev = [];
+  const add = (p, where) => { if (p.d >= from && p.d <= to && (!person || p.by === person)) ev.push({ ...p, where }); };
+  S.tasks.forEach(t => (t.presence||[]).forEach(p => add(p, projName(t.projectId) + (t.location?' · '+t.location:''))));
+  S.calls.forEach(c => (c.presence||[]).forEach(p => add(p, c.customer)));
+  if (!ev.length){ toastMsg('אין רישומי נוכחות בתקופה'); return; }
+  const rows = [['עובד','תאריך','אתר','הגעה','סיום','משך (שעות)','GPS']];
+  const byP = {};
+  ev.forEach(e => (byP[e.by] = byP[e.by] || []).push(e));
+  Object.entries(byP).forEach(([who, list]) => {
+    list.sort((a,b) => (a.d+a.t).localeCompare(b.d+b.t));
+    let openIn = null, total = 0;
+    list.forEach(e => {
+      if (e.type === 'in'){
+        if (openIn) rows.push([who, fmtDate(openIn.d), openIn.where, openIn.t, 'ללא סיום ⚠️', '', openIn.lat + ',' + openIn.lng]);
+        openIn = e;
+      } else if (openIn && openIn.d === e.d){
+        const mins = toMins(e.t) - toMins(openIn.t);
+        total += Math.max(0, mins);
+        rows.push([who, fmtDate(e.d), openIn.where, openIn.t, e.t, +(mins/60).toFixed(2), openIn.lat + ',' + openIn.lng]);
+        openIn = null;
+      } else {
+        rows.push([who, fmtDate(e.d), e.where, '', e.t + ' (ללא הגעה)', '', e.lat + ',' + e.lng]);
+      }
+    });
+    if (openIn) rows.push([who, fmtDate(openIn.d), openIn.where, openIn.t, 'ללא סיום ⚠️', '', openIn.lat + ',' + openIn.lng]);
+    rows.push([who, '', 'סה"כ לתקופה', '', '', +(total/60).toFixed(2), '']);
+    rows.push(['', '', '', '', '', '', '']);
+  });
+  downloadXlsx(rows, 'נוכחות', 'vas-hours-' + from + '-to-' + to + (person ? '-' + person : '') + '.xlsx');
+}
 function buildBillingReport(from, to){
   const inRange = d => d && d >= from && d <= to;
   const items = [];
   S.tasks.forEach(t => {
     if ((t.status === 'בוצע' || t.status === 'אושר') && inRange(t.closedAt || t.updatedAt))
-      items.push({ cust: projName(t.projectId), d: t.closedAt || t.updatedAt, what: t.title + (t.location ? ' (' + t.location + ')' : ''), rep: t.report || '', qty: t.qty || '', by: t.closedBy || t.updatedBy || '', bill: t.billing });
+      items.push({ cust: projName(t.projectId), d: t.closedAt || t.updatedAt, what: t.title + (t.location ? ' (' + t.location + ')' : ''), rep: t.report || '', qty: t.qty || '', by: t.closedBy || t.updatedBy || '', bill: t.billing, sign: !!t.signId });
   });
   S.calls.forEach(c => {
     if (c.status === 'נסגרה' && inRange(c.closedAt || c.updatedAt))
-      items.push({ cust: c.customer, d: c.closedAt || c.updatedAt, what: c.desc, rep: c.report || '', qty: c.qty || '', by: c.closedBy || c.updatedBy || '', bill: c.billing });
+      items.push({ cust: c.customer, d: c.closedAt || c.updatedAt, what: c.desc, rep: c.report || '', qty: c.qty || '', by: c.closedBy || c.updatedBy || '', bill: c.billing, sign: !!c.signId });
   });
   let msg = `*דוח עבודות לחיוב*\n📅 ${fmtDate(from)} — ${fmtDate(to)}\n`;
   if (!items.length) return msg + '\nאין עבודות שהושלמו בתקופה זו';
@@ -1782,7 +2021,7 @@ function buildBillingReport(from, to){
       msg += `▫️ ${fmtDate(i.d)} — ${i.what}`;
       if (i.rep) msg += ` | ${i.rep}`;
       if (i.qty) msg += ` (${i.qty})`;
-      msg += ` — ${i.by} · ${st}\n`;
+      msg += ` — ${i.by} · ${st}${i.sign ? ' · ✍️ חתום' : ''}\n`;
     });
   });
   msg += `\nסה"כ: ${items.length} עבודות · ${billed} חויבו · ${pending} ממתינות לחיוב`;
