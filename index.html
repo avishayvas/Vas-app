@@ -584,8 +584,10 @@ function startData(){
 async function importIntake(docId, d){
   try { await db.collection('vas_intake').doc(docId).delete(); } catch(e){ return; }
   const urgMap = { 'דחוף':'דחוף', 'גבוה':'גבוה', 'בינוני':'רגיל', 'רגיל':'נמוך' };
+  const dt = d.at ? new Date(d.at) : new Date();
   const c = {
     id: uid(), created: today(),
+    createdTime: String(dt.getHours()).padStart(2,'0') + ':' + String(dt.getMinutes()).padStart(2,'0'),
     customer: (d.site || '').trim(),
     desc: (d.topic ? d.topic + ' — ' : '') + (d.desc || ''),
     phone: (d.phone || '').trim(),
@@ -1001,7 +1003,7 @@ function renderFormPhotos(){
 async function saveTask(id){
   const title = document.getElementById('tf_title').value.trim();
   if (!title){ toastMsg('חסר תיאור למשימה'); return; }
-  const t = id ? S.tasks.find(x=>x.id===id) : { id: uid(), created: today() };
+  const t = id ? S.tasks.find(x=>x.id===id) : { id: uid(), created: today(), createdTime: nowTime() };
   const oldIds = id ? taskMedia(t).map(m=>m.id) : [];
 
   t.projectId = document.getElementById('tf_proj').value;
@@ -1076,7 +1078,7 @@ function renderCalls(){
           <span>🛠️ ${esc(c.desc)}</span>
           ${c.technician?`<span>👷 ${esc(c.technician)}</span>`:''}
           <span>⚡ ${esc(c.urgency)}</span>
-          <span>📅 ${fmtDate(c.created)}</span>
+          <span>📅 ${fmtDate(c.created)}${c.createdTime?` · ${esc(c.createdTime)}`:''}</span>
           ${c.createdBy?`<span>👤 ${esc(c.createdBy)}</span>`:''}
           ${c.closedBy?`<span>🔒 ${esc(c.closedBy)}</span>`:''}
         </div>
@@ -1159,7 +1161,7 @@ async function saveCall(id){
   if (customer === '__other') customer = document.getElementById('cf_customer_other').value.trim();
   const desc = document.getElementById('cf_desc').value.trim();
   if (!customer || !desc){ toastMsg('חסרים לקוח או תיאור'); return; }
-  const c = id ? S.calls.find(x=>x.id===id) : { id: uid(), created: today() };
+  const c = id ? S.calls.find(x=>x.id===id) : { id: uid(), created: today(), createdTime: nowTime() };
   const oldIds = id ? (c.media||[]).map(m=>m.id) : [];
   c.customer = customer; c.desc = desc;
   c.phone = document.getElementById('cf_phone').value.trim();
