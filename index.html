@@ -1952,6 +1952,28 @@ async function restoreBackup(){
     await persist(); render(); toastMsg('הגיבוי שוחזר ✓');
   } catch(e) { console.error(e); toastMsg('שגיאה בשחזור'); }
 }
+/* back-button: close modals -> home tab -> double-press to exit */
+let backExitArmed = false;
+try {
+  history.pushState({ vas: 1 }, '');
+  window.addEventListener('popstate', () => {
+    const modalOpen = document.getElementById('modalRoot').innerHTML.trim() !== '';
+    const helpOpen = document.getElementById('helpRoot') && document.getElementById('helpRoot').innerHTML.trim() !== '';
+    const photoOpen = document.getElementById('photoOverlay').style.display === 'flex';
+    if (helpOpen){ closeHelp(); history.pushState({ vas: 1 }, ''); return; }
+    if (photoOpen){ closePhoto(); history.pushState({ vas: 1 }, ''); return; }
+    if (modalOpen){ closeModal(); history.pushState({ vas: 1 }, ''); return; }
+    if (tab !== 'home'){ goTab('home'); history.pushState({ vas: 1 }, ''); return; }
+    if (!backExitArmed){
+      backExitArmed = true;
+      toastMsg('לחצו אחורה שוב כדי לצאת — או כפתור הבית כדי להשאיר ברקע');
+      history.pushState({ vas: 1 }, '');
+      setTimeout(() => backExitArmed = false, 2500);
+      return;
+    }
+    history.back();
+  });
+} catch(e){}
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(()=>{}));
 }
