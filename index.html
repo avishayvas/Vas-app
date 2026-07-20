@@ -217,13 +217,13 @@ function guardEdit(){
 if (READONLY) document.getElementById('roBanner').style.display = 'block';
 
 /* ==================== Constants ==================== */
-const STATUSES = ["פתוח","בטיפול","בוצע","אושר"];
-const STATUS_COLORS = {"פתוח":"#D64545","בטיפול":"#E08A2E","בוצע":"#3B6EA5","אושר":"#3E8E5A"};
+const STATUSES = ["פתוח","בטיפול","המשך טיפול","בוצע","אושר"];
+const STATUS_COLORS = {"פתוח":"#D64545","בטיפול":"#E08A2E","המשך טיפול":"#8E44AD","בוצע":"#3B6EA5","אושר":"#3E8E5A"};
 const URGENCIES = ["דחוף","גבוה","רגיל","נמוך"];
 const URGENCY_COLORS = {"דחוף":"#D64545","גבוה":"#E08A2E","רגיל":"#3B6EA5","נמוך":"#8A8F9C"};
 const DISCIPLINES = ["גילוי אש","תקשורת","מצלמות","בקרת כניסה","אינטרקום","פריצה","כריזה","כללי"];
-const CALL_STATUSES = ["חדשה","שובצה","בטיפול","נסגרה"];
-const CALL_STATUS_COLORS = {"חדשה":"#D64545","שובצה":"#E08A2E","בטיפול":"#3B6EA5","נסגרה":"#3E8E5A"};
+const CALL_STATUSES = ["חדשה","שובצה","בטיפול","המשך טיפול","נסגרה"];
+const CALL_STATUS_COLORS = {"חדשה":"#D64545","שובצה":"#E08A2E","בטיפול":"#3B6EA5","המשך טיפול":"#8E44AD","נסגרה":"#3E8E5A"};
 
 const SEED = {
   projects: [
@@ -324,6 +324,10 @@ function maybeNotifyNew(){
       const k = 'c'+c.id;
       if (seenStatus[k] !== undefined && seenStatus[k] !== c.status && c.status === 'נסגרה' && c.updatedBy !== USER)
         notif('✅ קריאה נסגרה — לחיוב', c.customer + ' — ' + (c.desc || '') + (c.updatedBy ? ' · ' + c.updatedBy : ''));
+    });
+    [...S.tasks.map(t=>({x:t,k:'t'+t.id,label:t.title})), ...S.calls.map(c=>({x:c,k:'c'+c.id,label:c.customer}))].forEach(({x,k,label}) => {
+      if (seenStatus[k] !== undefined && seenStatus[k] !== x.status && x.status === 'המשך טיפול' && x.updatedBy !== USER)
+        notif('⏸️ הופסק להמשך טיפול', label + (x.contDate ? ' · חזרה: ' + fmtDate(x.contDate) : '') + (x.updatedBy ? ' — ' + x.updatedBy : ''));
     });
   }
   const ndMap = {};
@@ -773,7 +777,7 @@ function renderHome(){
       ${onSite?`<button class="btn-mini" style="background:#D64545;flex-shrink:0" onclick="checkOut()">🏁 סימון עזיבה</button>`:`<button class="btn-mini" style="background:#3E8E5A;flex-shrink:0" onclick="openCheckIn()">📍 סימון הגעה</button>`}
     </div>`;
   })() : '';
-  const open = S.tasks.filter(t=>t.status==='פתוח'||t.status==='בטיפול');
+  const open = S.tasks.filter(t=>!['בוצע','אושר'].includes(t.status));
   const urgent = open.filter(t=>t.urgency==='דחוף');
   const overdue = S.tasks.filter(isOverdue);
   const waiting = S.tasks.filter(t=>t.status==='בוצע');
@@ -781,7 +785,7 @@ function renderHome(){
 
   const byProj = S.projects.filter(p=>p.active).map(p=>({
     name:p.name,
-    open: S.tasks.filter(t=>t.projectId===p.id && (t.status==='פתוח'||t.status==='בטיפול')).length,
+    open: S.tasks.filter(t=>t.projectId===p.id && !['בוצע','אושר'].includes(t.status)).length,
     total: S.tasks.filter(t=>t.projectId===p.id).length
   })).filter(x=>x.total>0);
   const maxOpen = Math.max(1, ...byProj.map(x=>x.open));
@@ -923,6 +927,7 @@ function taskCard(t){
         <span>🔧 ${esc(t.discipline)}</span>
         ${t.assignee?`<span>👷 ${esc(t.assignee)}</span>`:''}
         ${t.due?`<span class="${isOverdue(t)?'overdue':''}">📅 ${fmtDate(t.due)}${isOverdue(t)?' ⚠️':''}</span>`:''}
+        ${(t.status==='המשך טיפול'&&t.contDate)?`<span style="color:#8E44AD;font-weight:800">⏸️ חזרה: ${fmtDate(t.contDate)}${t.contDate<today()?' ⚠️':''}</span>`:''}
         ${t.createdBy?`<span>👤 ${esc(t.createdBy)}</span>`:''}
         ${(t.updatedBy&&t.updatedBy!==t.createdBy)?`<span>✏️ ${esc(t.updatedBy)}</span>`:''}
         ${t.closedBy?`<span>🔒 ${esc(t.closedBy)}</span>`:''}
@@ -942,7 +947,8 @@ function taskCard(t){
 function cycleTaskStatus(id){
   if (!guardEdit()) return;
   const t = S.tasks.find(x=>x.id===id); if(!t) return;
-  const nextT = STATUSES[(STATUSES.indexOf(t.status)+1)%STATUSES.length];
+  const CYCLE_T = { 'פתוח':'בטיפול', 'בטיפול':'בוצע', 'המשך טיפול':'בוצע', 'בוצע':'אושר', 'אושר':'פתוח' };
+  const nextT = CYCLE_T[t.status] || 'פתוח';
   if (nextT === 'בוצע'){ openReportModal('task', id, nextT); return; }
   t.status = nextT;
   t.nudge = null;
@@ -1099,6 +1105,7 @@ function renderCalls(){
           <span>⚡ ${esc(c.urgency)}</span>
           <span>📅 ${fmtDate(c.created)}${c.createdTime?` · ${esc(c.createdTime)}`:''}</span>
           ${slaBadge(c)}
+          ${(c.status==='המשך טיפול'&&c.contDate)?`<span style="color:#8E44AD;font-weight:800">⏸️ חזרה: ${fmtDate(c.contDate)}${c.contDate<today()?' ⚠️':''}</span>`:''}
           ${c.createdBy?`<span>👤 ${esc(c.createdBy)}</span>`:''}
           ${c.closedBy?`<span>🔒 ${esc(c.closedBy)}</span>`:''}
         </div>
@@ -1120,7 +1127,8 @@ function renderCalls(){
 function cycleCallStatus(id){
   if (!guardEdit()) return;
   const c = S.calls.find(x=>x.id===id); if(!c) return;
-  const nextC = CALL_STATUSES[(CALL_STATUSES.indexOf(c.status)+1)%CALL_STATUSES.length];
+  const CYCLE_C = { 'חדשה':'שובצה', 'שובצה':'בטיפול', 'בטיפול':'נסגרה', 'המשך טיפול':'נסגרה', 'נסגרה':'חדשה' };
+  const nextC = CYCLE_C[c.status] || 'חדשה';
   if (nextC === 'נסגרה'){ openReportModal('call', id, nextC); return; }
   c.status = nextC;
   c.nudge = null;
@@ -1253,7 +1261,7 @@ function buildProjReport(projId){
   return msg;
 }
 function buildPersonReport(person){
-  const items = S.tasks.filter(t=>t.assignee===person && (t.status==='פתוח'||t.status==='בטיפול'));
+  const items = S.tasks.filter(t=>t.assignee===person && !['בוצע','אושר'].includes(t.status));
   const callItems = S.calls.filter(c=>c.technician===person && c.status!=='נסגרה');
   let msg = `*תוכנית עבודה — ${person}*\n📅 ${fmtDate(today())}\n`;
   if (items.length===0 && callItems.length===0) msg += '\nאין משימות פתוחות ✅';
@@ -1271,7 +1279,7 @@ function buildDailyReport(d){
   const dispD = fmtDate(d);
   const doneT = S.tasks.filter(t => (t.closedAt === d) || (t.updatedAt === d && (t.status === 'בוצע' || t.status === 'אושר')));
   const doneC = S.calls.filter(c => (c.closedAt === d) || (c.updatedAt === d && c.status === 'נסגרה'));
-  const openT = S.tasks.filter(t => t.status === 'פתוח' || t.status === 'בטיפול');
+  const openT = S.tasks.filter(t => !['בוצע','אושר'].includes(t.status));
   const openC = S.calls.filter(c => c.status !== 'נסגרה');
   const newT = S.tasks.filter(t => t.created === d).length;
   const newC = S.calls.filter(c => c.created === d).length;
@@ -1298,6 +1306,20 @@ function buildDailyReport(d){
     msg += `\n`;
   });
 
+  const contItems = [
+    ...S.tasks.filter(t => t.status === 'המשך טיפול' && t.updatedAt === d).map(t => ({ what: projName(t.projectId) + ' — ' + t.title, rep: t.report, by: t.updatedBy, cd: t.contDate })),
+    ...S.calls.filter(c => c.status === 'המשך טיפול' && c.updatedAt === d).map(c => ({ what: c.customer + ' — ' + c.desc, rep: c.report, by: c.updatedBy, cd: c.contDate }))
+  ];
+  if (contItems.length){
+    msg += `\n⏸️ *הופסק להמשך טיפול (${contItems.length}):*\n`;
+    contItems.forEach(i => {
+      msg += `▫️ ${i.what}`;
+      if (i.rep) msg += ` | בוצע עד כה: ${i.rep}`;
+      if (i.cd) msg += ` · חזרה: ${fmtDate(i.cd)}`;
+      if (i.by) msg += ` — ${i.by}`;
+      msg += `\n`;
+    });
+  }
   msg += `\n⏳ *נותר לביצוע (${openT.length + openC.length}):*\n`;
   if (!openT.length && !openC.length) msg += `— הכל סגור! 🎉\n`;
   const byProj = {};
@@ -1668,13 +1690,16 @@ function openReportModal(kind, id, nextStatus){
     <textarea id="rp_text" rows="3" placeholder="לדוגמה: הותקנו נקודות בקומה 3, הוחלף גלאי, בוצעו בדיקות">${esc(x.report||'')}</textarea>
     <label>כמות</label>
     <input id="rp_qty" value="${esc(x.qty||'')}" placeholder="12 נקודות / 3 מצלמות / יחידה 1">
+    <label>⏸️ מועד חזרה משוער (אם ממשיכים ביום אחר)</label>
+    <input id="rp_cont" type="date" value="${esc(x.contDate||'')}">
     <label>✍️ חתימת לקוח (לא חובה)</label>
     <input id="rp_signname" value="" placeholder="שם החותם" style="margin-bottom:8px">
     <canvas id="rp_sign" width="640" height="240" style="width:100%;height:130px;border:1.5px dashed #C9962E;border-radius:10px;background:#fff;touch-action:none"></canvas>
     <div class="task-actions" style="margin-top:6px"><button class="btn-tiny" onclick="clearSign()">✕ ניקוי חתימה</button></div>
     <div class="form-actions">
       <button class="btn-secondary" onclick="applyReport('${kind}','${id}','${esc(nextStatus)}',true)">דילוג</button>
-      <button class="btn-primary" onclick="applyReport('${kind}','${id}','${esc(nextStatus)}',false)">שמירה וסגירה ✓</button>
+      <button class="btn-secondary" style="background:#F3EAF9;color:#8E44AD;font-weight:800" onclick="applyReport('${kind}','${id}','המשך טיפול',false)">⏸️ המשך טיפול</button>
+      <button class="btn-primary" onclick="applyReport('${kind}','${id}','${esc(nextStatus)}',false)">סגירה ✓</button>
     </div>`);
   initSignPad();
 }
@@ -1751,6 +1776,8 @@ async function applyReport(kind, id, nextStatus, skip){
   }
   x.status = nextStatus;
   x.nudge = null;
+  const cdEl = document.getElementById('rp_cont');
+  x.contDate = (nextStatus === 'המשך טיפול' && cdEl) ? cdEl.value : '';
   x.updatedBy = USER; x.updatedAt = today();
   if (kind === 'task'){
     if (x.status === 'אושר'){ x.closedBy = USER; x.closedAt = today(); x.closedTime = nowTime(); } else { x.closedBy = ''; x.closedAt = ''; x.closedTime = ''; }
