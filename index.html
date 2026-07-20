@@ -1257,7 +1257,7 @@ function buildProjReport(projId){
     });
     msg += `\nסה"כ: ${items.length} משימות פתוחות`;
   }
-  msg += '\n\n_VAS Security — ש.ו טכנולוגיות ביטחון_';
+  msg += '\n\n_VAS Security Technology LTD_';
   return msg;
 }
 function buildPersonReport(person){
@@ -1994,7 +1994,7 @@ async function openInvoiceDoc(kind, id){
     </table>
     ${signImg?`<div class="sig"><div style="font-weight:800;margin-bottom:8px">✍️ חתימת הלקוח${x.signName?' — '+esc(x.signName):''}</div><img src="${signImg}"></div>`:''}
     <div class="np"><button onclick="window.print()">🖨️ הדפסה / שמירה כ-PDF</button></div>
-    <div class="ft">VAS Security · ש.ו טכנולוגיות ביטחון בע"מ · הופק ${fmtDate(today())} ${nowTime()}</div>
+    <div class="ft">VAS Security Technology LTD · הופק ${fmtDate(today())} ${nowTime()}</div>
     </body></html>`);
   w.document.close();
 }
@@ -2023,7 +2023,7 @@ function sendClientUpdate(id){
   const c = S.calls.find(x=>x.id===id); if (!c || !c.phone) return;
   const name = (c.createdBy || '').startsWith('לקוח: ') ? c.createdBy.slice(6) : '';
   let msg = '🛡️ *VAS SECURITY* 🛡️\n';
-  msg += '_ש.ו טכנולוגיות ביטחון_\n';
+  msg += '_VAS Security Technology LTD_\n';
   msg += '━━━━━━━━━━━━━━\n';
   msg += 'שלום' + (name ? ' ' + name : '') + ' 👋\n';
   if (c.status === 'נסגרה'){
@@ -2164,7 +2164,7 @@ function buildPresenceReport(from, to, person){
     }
   });
   msg += '\n📍 נקודות ה-GPS המדויקות זמינות על כרטיסי המשימות (כפתור "מפה")';
-  msg += '\n\n_VAS Security — ש.ו טכנולוגיות ביטחון_';
+  msg += '\n\n_VAS Security Technology LTD_';
   return msg;
 }
 function withXLSX(cb){
@@ -2263,7 +2263,7 @@ function buildBillingReport(from, to){
     });
   });
   msg += `\nסה"כ: ${items.length} עבודות · ${billed} חויבו · ${pending} ממתינות לחיוב`;
-  msg += '\n\n_VAS Security — ש.ו טכנולוגיות ביטחון_';
+  msg += '\n\n_VAS Security Technology LTD_';
   return msg;
 }
 function toggleUpsellPaid(kind, id){
