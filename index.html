@@ -2022,7 +2022,10 @@ function sendClientUpdate(id){
   if (!guardEdit()) return;
   const c = S.calls.find(x=>x.id===id); if (!c || !c.phone) return;
   const name = (c.createdBy || '').startsWith('לקוח: ') ? c.createdBy.slice(6) : '';
-  let msg = 'שלום' + (name ? ' ' + name : '') + ', כאן VAS Security 🛡️\n';
+  let msg = '🛡️ *VAS SECURITY* 🛡️\n';
+  msg += '_ש.ו טכנולוגיות ביטחון_\n';
+  msg += '━━━━━━━━━━━━━━\n';
+  msg += 'שלום' + (name ? ' ' + name : '') + ' 👋\n';
   if (c.status === 'נסגרה'){
     msg += 'הטיפול בקריאתך (' + c.desc.split(' — ')[0] + ') הסתיים בהצלחה ✓\n';
     if (c.report) msg += 'מה בוצע: ' + c.report + '\n';
@@ -2031,10 +2034,13 @@ function sendClientUpdate(id){
     msg += 'עדכון לגבי קריאתך: הנושא בטיפול' + (c.technician ? ' — הטכנאי ' + c.technician + ' שובץ' : '') + ', ונתאם איתך את מועד ההגעה.\n';
     msg += 'תודה על הסבלנות 🙏';
   } else {
-    msg += 'קיבלנו את קריאתך בנושא: ' + c.desc.split(' — ')[0] + '\n';
+    msg += 'קיבלנו את קריאתך בנושא: ' + c.desc.split(' — ')[0] + ' ✅\n';
     msg += 'הפנייה נקלטה במערכת ואנחנו מטפלים בה. נעדכן אותך לקראת ההגעה.\n';
     msg += 'תודה, צוות VAS';
   }
+  msg += '\n━━━━━━━━━━━━━━\n';
+  msg += 'לפתיחת קריאה נוספת בכל עת:\n';
+  msg += 'https://avishayvas.github.io/Vas-app/call.html';
   c.clientUpdated = { by: USER, t: nowTime(), d: today() };
   pushLog('📱 עדכן את הלקוח: ' + c.customer);
   persist(); render();
