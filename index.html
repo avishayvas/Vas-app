@@ -1110,6 +1110,7 @@ function renderCalls(){
         ${mediaStrip(c.media)}
         ${claimBlock('call', c)}
         ${nudgeBlock('call', c)}
+        ${clientUpdateBlock(c)}
         ${presenceBlock('call', c)}
         ${c.signId?`<div class="task-actions"><button class="btn-tiny" style="background:#EFF7F0;color:#2C6E48" onclick="openPhoto('${c.signId}')">✍️ חתימת לקוח${c.signName?`: ${esc(c.signName)}`:''}</button></div>`:(!READONLY&&USER?`<div class="task-actions"><button class="btn-tiny" onclick="openSignModal('call','${c.id}')">✍️ החתמת לקוח</button></div>`:'')}
         ${billingBlock('call', c)}
@@ -1979,6 +1980,40 @@ function emailItem(kind, id){
   const subject = 'לחיוב: ' + cust + ' — ' + fmtDate(x.closedAt || x.created);
   const body = itemSummaryText(kind, x) + '\n(מסמך אישור הביצוע עם החתימה — מפיקים בכפתור 🧾 באפליקציה ומצרפים)\n\nVAS Security';
   location.href = 'mailto:' + encodeURIComponent(to) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+}
+function clientUpdateBlock(c){
+  if (!c.phone || READONLY || !USER) return '';
+  let h = '';
+  if (c.clientUpdated){
+    h += `<div class="task-actions" style="color:#3E8E5A;font-weight:700;font-size:12.5px">✅ הלקוח עודכן · ${esc(c.clientUpdated.t)} (${esc(c.clientUpdated.by)})</div>`;
+  }
+  const label = c.status === 'נסגרה' ? '📱 עדכון סיום ללקוח' : c.clientUpdated ? '📱 עדכון נוסף ללקוח' : '📱 אישור קבלה ללקוח';
+  h += `<div class="task-actions"><button class="btn-tiny" style="background:#E7F3EC;color:#2C6E48" onclick="sendClientUpdate('${c.id}')">${label}</button></div>`;
+  return h;
+}
+function sendClientUpdate(id){
+  if (!guardEdit()) return;
+  const c = S.calls.find(x=>x.id===id); if (!c || !c.phone) return;
+  const name = (c.createdBy || '').startsWith('לקוח: ') ? c.createdBy.slice(6) : '';
+  let msg = 'שלום' + (name ? ' ' + name : '') + ', כאן VAS Security 🛡️\n';
+  if (c.status === 'נסגרה'){
+    msg += 'הטיפול בקריאתך (' + c.desc.split(' — ')[0] + ') הסתיים בהצלחה ✓\n';
+    if (c.report) msg += 'מה בוצע: ' + c.report + '\n';
+    msg += 'תודה שבחרתם בנו! לכל צורך נוסף אנחנו כאן.';
+  } else if (c.status === 'שובצה' || c.status === 'בטיפול'){
+    msg += 'עדכון לגבי קריאתך: הנושא בטיפול' + (c.technician ? ' — הטכנאי ' + c.technician + ' שובץ' : '') + ', ונתאם איתך את מועד ההגעה.\n';
+    msg += 'תודה על הסבלנות 🙏';
+  } else {
+    msg += 'קיבלנו את קריאתך בנושא: ' + c.desc.split(' — ')[0] + '\n';
+    msg += 'הפנייה נקלטה במערכת ואנחנו מטפלים בה. נעדכן אותך לקראת ההגעה.\n';
+    msg += 'תודה, צוות VAS';
+  }
+  c.clientUpdated = { by: USER, t: nowTime(), d: today() };
+  pushLog('📱 עדכן את הלקוח: ' + c.customer);
+  persist(); render();
+  const phone = c.phone.replace(/\D/g, '');
+  const intl = phone.startsWith('972') ? phone : '972' + phone.replace(/^0/, '');
+  window.open('https://wa.me/' + intl + '?text=' + encodeURIComponent(msg), '_blank');
 }
 function nudgeBlock(kind, x){
   const final = kind === 'task' ? ['בוצע','אושר'].includes(x.status) : x.status === 'נסגרה';
