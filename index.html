@@ -259,6 +259,7 @@ let filters = { proj:'all', status:'open', assignee:'all', special:null };
 let callsShowClosed = false;
 let reportProj = '', reportPerson = '', reportDate = '';
 let billFrom = '', billTo = '';
+let stmtCust = '';
 let presFrom = '', presTo = '', presWho = '';
 let taskSearch = '', callSearch = '';
 const photoCache = {};
@@ -800,6 +801,7 @@ function renderHome(){
       ${kpi('ממתינות לאישור', waiting.length, '#3B6EA5', 'waiting')}
     </div>
     ${isAdmin() ? pendingCard() : ''}
+    ${myDayCard()}
     <div class="card">
       <div class="card-title">פתוחות לפי פרויקט</div>
       ${byProj.length===0 ? '<div class="empty">אין משימות עדיין — התחילו בלשונית משימות</div>' :
@@ -820,6 +822,26 @@ function renderHome(){
             <div class="mini-task-sub">${esc(projName(t.projectId))} · ${esc(t.assignee||'לא שובץ')}</div></div>
           </div>`).join('')}
       </div>` : ''}
+    ${(()=>{ if(!isAdmin()) return '';
+      const rets = [
+        ...S.tasks.filter(t=>t.status==='המשך טיפול'&&t.contDate&&t.contDate<=today()).map(t=>({label:projName(t.projectId)+' — '+t.title,cd:t.contDate,by:t.assignee})),
+        ...S.calls.filter(c=>c.status==='המשך טיפול'&&c.contDate&&c.contDate<=today()).map(c=>({label:c.customer+' — '+c.desc,cd:c.contDate,by:c.technician}))
+      ];
+      if(!rets.length) return '';
+      return `<div class="card"><div class="card-title" style="color:#8E44AD">⏸️ הגיע מועד החזרה (${rets.length})</div>` + rets.map(r=>`
+        <div class="mini-task" style="cursor:default"><span class="dot" style="background:#8E44AD"></span>
+        <div><div class="mini-task-title">${esc(r.label)}</div>
+        <div class="mini-task-sub">חזרה: ${fmtDate(r.cd)}${r.cd<today()?' · ⚠️ עבר המועד':''}${r.by?' · '+esc(r.by):''}</div></div></div>`).join('') + `</div>`;
+    })()}
+    ${(()=>{ if(!isAdmin()) return '';
+      const un = S.calls.filter(c => (c.createdBy||'').startsWith('לקוח') && c.phone && !c.clientUpdated && c.status !== 'נסגרה');
+      if(!un.length) return '';
+      return `<div class="card"><div class="card-title" style="color:#3E8E5A">📱 ממתינים לאישור קבלה (${un.length})</div>` + un.map(c=>`
+        <div class="mini-task" style="cursor:default"><span class="dot" style="background:#3E8E5A"></span>
+        <div style="flex:1"><div class="mini-task-title">${esc(c.customer)} — ${esc(c.desc)}</div>
+        <div class="mini-task-sub">${fmtDate(c.created)}${c.createdTime?' · '+esc(c.createdTime):''}</div></div>
+        <button class="btn-mini" style="background:#3E8E5A" onclick="sendClientUpdate('${c.id}')">📱 שלח</button></div>`).join('') + `</div>`;
+    })()}
     ${(()=>{ if(!isAdmin()) return '';
       const reqs = [...S.tasks.filter(t=>t.claimReq).map(t=>({x:t,kind:'task',label:t.title})), ...S.calls.filter(c=>c.claimReq).map(c=>({x:c,kind:'call',label:c.customer}))];
       if(!reqs.length) return '';
@@ -866,6 +888,21 @@ function renderHome(){
             <div class="mini-task-sub">${esc(c.status)} · ${esc(c.technician||'לא שובץ')}</div></div>
           </div>`).join('')}
     </div>`;
+}
+function myDayCard(){
+  if (!USER || READONLY) return '';
+  const rows = [
+    ...S.tasks.filter(t => t.assignee === USER && !['בוצע','אושר'].includes(t.status)).map(t => ({ label: projName(t.projectId) + ' — ' + t.title, urg: t.urgency, cont: t.status === 'המשך טיפול' ? t.contDate : '', due: t.due, kind: 'tasks' })),
+    ...S.calls.filter(c => c.technician === USER && c.status !== 'נסגרה').map(c => ({ label: c.customer + ' — ' + c.desc, urg: c.urgency, cont: c.status === 'המשך טיפול' ? c.contDate : '', due: '', kind: 'calls' }))
+  ];
+  if (!rows.length) return '';
+  rows.sort((a,b) => URGENCIES.indexOf(a.urg) - URGENCIES.indexOf(b.urg));
+  return `<div class="card"><div class="card-title">🧰 שלי כרגע (${rows.length})</div>` + rows.slice(0,6).map(r=>`
+    <div class="mini-task" onclick="goTab('${r.kind}')">
+      <span class="dot" style="background:${URGENCY_COLORS[r.urg]||'#8A8F9C'}"></span>
+      <div><div class="mini-task-title">${esc(r.label)}</div>
+      <div class="mini-task-sub">${r.cont?`⏸️ חזרה: ${fmtDate(r.cont)}${r.cont<today()?' ⚠️':''}`:r.due?`📅 יעד: ${fmtDate(r.due)}${r.due<today()?' ⚠️ באיחור':''}`:esc(r.urg)}</div></div>
+    </div>`).join('') + (rows.length>6?`<div class="settings-sub" style="text-align:center;margin-top:4px">ועוד ${rows.length-6}…</div>`:'') + `</div>`;
 }
 const kpi = (label,value,color,go)=>`<div class="kpi" style="border-inline-start-color:${color};cursor:pointer" onclick="kpiGo('${go}')"><div class="kpi-value" style="color:${color}">${value}</div><div class="kpi-label">${label}</div></div>`;
 function kpiGo(kind){
@@ -1405,6 +1442,17 @@ function renderReports(){
         <div><label style="display:block;font-size:12px;font-weight:700;color:#555B69;margin-bottom:4px">מתאריך</label><input type="date" value="${esc(billFrom)}" onchange="billFrom=this.value;render()"></div>
         <div><label style="display:block;font-size:12px;font-weight:700;color:#555B69;margin-bottom:4px">עד תאריך</label><input type="date" value="${esc(billTo)}" onchange="billTo=this.value;render()"></div>
       </div>
+      ${(()=>{ const set = new Set();
+        S.tasks.forEach(t=>{ const d=t.closedAt||t.updatedAt; if((t.status==='בוצע'||t.status==='אושר')&&d>=billFrom&&d<=billTo) set.add(projName(t.projectId)); });
+        S.calls.forEach(c=>{ const d=c.closedAt||c.updatedAt; if(c.status==='נסגרה'&&d>=billFrom&&d<=billTo) set.add(c.customer); });
+        const list=[...set].sort();
+        if(!list.length) return '';
+        return `<label style="display:block;font-size:12px;font-weight:700;color:#555B69;margin:10px 0 4px">🧾 דוח מרוכז ללקוח (מסמך להדפסה/PDF)</label>
+        <div class="form-2col">
+          <div><select onchange="stmtCust=this.value">${'<option value="">— בחרו לקוח —</option>'+list.map(x=>`<option${stmtCust===x?' selected':''}>${esc(x)}</option>`).join('')}</select></div>
+          <div><button class="btn-secondary" style="width:100%" onclick="openCustomerDoc()">🧾 הפקת מסמך</button></div>
+        </div>`;
+      })()}
       <pre class="report-preview">${esc(buildBillingReport(billFrom, billTo))}</pre>
       <div class="form-actions">
         <button class="btn-secondary" onclick="copyReport('billing')">📋 העתקה</button>
@@ -1953,6 +2001,45 @@ function itemSummaryText(kind, x){
   if (x.signName || x.signId) s += 'חתימת לקוח: ' + (x.signName || 'חתום') + ' ✓\n';
   if (x.billing && x.billing.inv) s += 'חשבונית: ' + x.billing.inv + '\n';
   return s;
+}
+async function openCustomerDoc(){
+  if (!isAdmin()){ toastMsg('למנהלים בלבד'); return; }
+  if (!stmtCust){ toastMsg('בחרו לקוח מהרשימה'); return; }
+  const from = billFrom, to = billTo;
+  const inRange = d => d && d >= from && d <= to;
+  const items = [];
+  S.tasks.forEach(t => { if ((t.status==='בוצע'||t.status==='אושר') && inRange(t.closedAt||t.updatedAt) && projName(t.projectId)===stmtCust) items.push({ d: t.closedAt||t.updatedAt, what: t.title + (t.location?' ('+t.location+')':''), rep: t.report||'', qty: t.qty||'', by: t.closedBy||t.updatedBy||'', sign: !!t.signId, inv: t.billing&&t.billing.inv?t.billing.inv:'' }); });
+  S.calls.forEach(c => { if (c.status==='נסגרה' && inRange(c.closedAt||c.updatedAt) && c.customer===stmtCust) items.push({ d: c.closedAt||c.updatedAt, what: c.desc, rep: c.report||'', qty: c.qty||'', by: c.closedBy||c.updatedBy||'', sign: !!c.signId, inv: c.billing&&c.billing.inv?c.billing.inv:'' }); });
+  if (!items.length){ toastMsg('אין עבודות ללקוח זה בתקופה'); return; }
+  items.sort((a,b)=>(a.d||'').localeCompare(b.d||''));
+  const w = window.open('', '_blank');
+  if (!w){ toastMsg('הדפדפן חסם חלון — אשרו חלונות קופצים'); return; }
+  w.document.write(`<!DOCTYPE html><html lang="he" dir="rtl"><head><meta charset="UTF-8"><title>ריכוז עבודות — ${esc(stmtCust)}</title>
+    <style>
+      body{font-family:'Heebo',Arial,sans-serif;margin:0;padding:30px;color:#1B1F2A;max-width:760px;margin:0 auto}
+      .hd{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #C9962E;padding-bottom:14px;margin-bottom:8px}
+      .brand{font-weight:900;font-size:24px;color:#C9962E}.brand span{color:#1B1F2A;font-weight:300;font-size:15px;letter-spacing:3px}
+      h1{font-size:19px;margin:0 0 3px}
+      table{width:100%;border-collapse:collapse;margin:16px 0;font-size:13px}
+      th{background:#1B1F2A;color:#fff;padding:8px;font-size:12.5px}
+      td{padding:8px;border:1px solid #DDD;vertical-align:top}
+      tr:nth-child(even) td{background:#FAF9F4}
+      .sum{background:#F5F3ED;font-weight:800;padding:10px 14px;border-radius:10px;margin-top:6px}
+      .ft{margin-top:26px;text-align:center;font-size:12px;color:#888;border-top:1px solid #EEE;padding-top:10px}
+      .np{margin:18px 0;text-align:center}
+      .np button{background:#1B1F2A;color:#fff;border:none;border-radius:10px;padding:12px 26px;font-family:inherit;font-weight:800;font-size:15px;cursor:pointer}
+      @media print{.np{display:none}}
+    </style></head><body>
+    <div class="hd"><div><h1>ריכוז עבודות שבוצעו</h1><div style="font-size:13px;color:#666">${esc(stmtCust)} · ${fmtDate(from)} — ${fmtDate(to)}</div></div>
+    <div style="text-align:center"><div class="brand">VAS <span>SECURITY</span></div><div style="font-size:10px;color:#888;letter-spacing:2px">TECHNOLOGY LTD</div></div></div>
+    <table><tr><th>תאריך</th><th>עבודה</th><th>דיווח ביצוע</th><th>כמות</th><th>בוצע ע"י</th><th>חתום</th><th>חשבונית</th></tr>
+    ${items.map(i=>`<tr><td>${fmtDate(i.d)}</td><td>${esc(i.what)}</td><td>${esc(i.rep)}</td><td>${esc(i.qty)}</td><td>${esc(i.by)}</td><td style="text-align:center">${i.sign?'✔':''}</td><td>${esc(i.inv)}</td></tr>`).join('')}
+    </table>
+    <div class="sum">סה"כ: ${items.length} עבודות בתקופה · ${items.filter(i=>i.sign).length} חתומות ע"י הלקוח</div>
+    <div class="np"><button onclick="window.print()">🖨️ הדפסה / שמירה כ-PDF</button></div>
+    <div class="ft">VAS Security Technology LTD · הופק ${fmtDate(today())} ${nowTime()}</div>
+    </body></html>`);
+  w.document.close();
 }
 async function openInvoiceDoc(kind, id){
   if (!isAdmin()){ toastMsg('מסמכי חיוב למנהלים בלבד'); return; }
