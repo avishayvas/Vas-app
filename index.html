@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
-<title>VAS Security · ניהול פרויקטים</title>
+<title>VAS Security Technology LTD · ניהול פרויקטים</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%231B1F2A'/><text x='50' y='68' font-size='48' font-weight='900' text-anchor='middle' fill='%23C9962E' font-family='Arial'>V</text></svg>">
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800;900&display=swap');
@@ -151,7 +151,7 @@ main { padding: 14px 14px 20px; max-width: 760px; margin: 0 auto; }
 <header class="vas-header">
   <div>
     <div class="vas-brand">VAS <span>SECURITY</span></div>
-    <div class="vas-sub">ניהול פרויקטים ופאנץ׳ ליסט</div>
+    <div class="vas-sub">VAS Security Technology LTD</div>
   </div>
   <div class="vas-side">
     <div class="vas-date" id="hdrDate"></div>
@@ -174,7 +174,7 @@ main { padding: 14px 14px 20px; max-width: 760px; margin: 0 auto; }
 <div id="loginScreen" class="login-screen">
   <div class="login-box">
     <div class="vas-brand" style="font-size:26px">VAS <span>SECURITY</span></div>
-    <div class="vas-sub" style="margin:4px 0 16px">כניסה למערכת ניהול הפרויקטים</div>
+    <div class="vas-sub" style="margin:4px 0 16px">VAS Security Technology LTD · כניסה למערכת</div>
     <label>אימייל</label>
     <input id="li_email" type="email" inputmode="email" autocomplete="username" dir="ltr">
     <label>סיסמה</label>
@@ -359,7 +359,7 @@ function enableNotifs(){
     render();
     if (p === 'granted'){
       toastMsg('התראות הופעלו 🔔');
-      notif('VAS Security', 'ההתראות פעילות — תקבלו עדכון על כל קריאה ומשימה חדשה');
+      notif('VAS Security Technology LTD', 'ההתראות פעילות — תקבלו עדכון על כל קריאה ומשימה חדשה');
     } else {
       toastMsg('ההרשאה לא אושרה — אפשרו התראות לאתר בהגדרות הדפדפן');
     }
@@ -1981,7 +1981,7 @@ async function openInvoiceDoc(kind, id){
       @media print{.np{display:none}}
     </style></head><body>
     <div class="hd"><div><h1>אישור ביצוע עבודה</h1><div style="font-size:13px;color:#666">מסמך לצירוף לחשבונית</div></div>
-    <div class="brand">VAS <span>SECURITY</span></div></div>
+    <div style="text-align:left"><div class="brand">VAS <span>SECURITY</span></div><div style="font-size:10px;color:#888;letter-spacing:2px;text-align:center">TECHNOLOGY LTD</div></div></div>
     <table>
       <tr><td class="k">לקוח / אתר</td><td>${esc(cust)}</td></tr>
       <tr><td class="k">עבודה</td><td>${esc(kind==='task'?x.title:x.desc)}</td></tr>
