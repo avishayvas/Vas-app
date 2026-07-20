@@ -1110,6 +1110,7 @@ function renderCalls(){
           ${c.closedBy?`<span>🔒 ${esc(c.closedBy)}</span>`:''}
         </div>
         ${c.phone?`<div class="task-meta"><a href="tel:${esc(c.phone)}">📞 ${esc(c.phone)}</a></div>`:''}
+        ${clientUpdateBlock(c)}
         ${c.notes?`<div class="task-notes">📝 ${esc(c.notes)}</div>`:''}
         ${c.doneDesc?`<div class="task-notes" style="background:#EEF3F9;color:#2B5580;font-weight:600">🔧 בוצע: ${esc(c.doneDesc)}${c.doneQty?`<br>📦 כמויות: ${esc(c.doneQty)}`:''}${c.doneBy?`<br><span style="font-weight:500;font-size:12px">דווח ע"י ${esc(c.doneBy)} · ${fmtDate(c.doneAt||'')}</span>`:''}</div>`:''}
         ${c.report?`<div class="task-notes" style="background:#EEF3FA;color:#2B4E77;font-weight:600">🛠️ בוצע: ${esc(c.report)}${c.qty?` · ${esc(c.qty)}`:''}</div>`:''}
@@ -1117,7 +1118,6 @@ function renderCalls(){
         ${mediaStrip(c.media)}
         ${claimBlock('call', c)}
         ${nudgeBlock('call', c)}
-        ${clientUpdateBlock(c)}
         ${presenceBlock('call', c)}
         ${c.signId?`<div class="task-actions"><button class="btn-tiny" style="background:#EFF7F0;color:#2C6E48" onclick="openPhoto('${c.signId}')">✍️ חתימת לקוח${c.signName?`: ${esc(c.signName)}`:''}</button></div>`:(!READONLY&&USER?`<div class="task-actions"><button class="btn-tiny" onclick="openSignModal('call','${c.id}')">✍️ החתמת לקוח</button></div>`:'')}
         ${billingBlock('call', c)}
@@ -2014,8 +2014,8 @@ function clientUpdateBlock(c){
   if (c.clientUpdated){
     h += `<div class="task-actions" style="color:#3E8E5A;font-weight:700;font-size:12.5px">✅ הלקוח עודכן · ${esc(c.clientUpdated.t)} (${esc(c.clientUpdated.by)})</div>`;
   }
-  const label = c.status === 'נסגרה' ? '📱 עדכון סיום ללקוח' : c.clientUpdated ? '📱 עדכון נוסף ללקוח' : '📱 אישור קבלה ללקוח';
-  h += `<div class="task-actions"><button class="btn-tiny" style="background:#E7F3EC;color:#2C6E48" onclick="sendClientUpdate('${c.id}')">${label}</button></div>`;
+  const label = c.status === 'נסגרה' ? '📱 עדכון סיום ללקוח' : c.clientUpdated ? '📱 עדכון נוסף ללקוח' : '📱 אישור קבלה ללקוח בוואטסאפ';
+  h += `<div class="task-actions"><button class="btn-tiny" style="background:${c.clientUpdated?'#EFEDE6':'#3E8E5A'};color:${c.clientUpdated?'#2C6E48':'#fff'};font-size:13px;padding:8px 14px" onclick="sendClientUpdate('${c.id}')">${label}</button></div>`;
   return h;
 }
 function sendClientUpdate(id){
