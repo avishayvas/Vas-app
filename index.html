@@ -1456,6 +1456,15 @@ function renderSettings(){
     </div>
     ${isAdmin()?`
     <div class="card">
+      <div class="card-title">📧 מייל המשרד לחיובים</div>
+      <div class="settings-sub">כפתור "📧 מייל" על עבודות שהושלמו יפתח הודעה ממוענת לכתובת הזו:</div>
+      <input id="officeEmailInput" value="${esc(S.officeEmail||'')}" inputmode="email" dir="ltr" placeholder="office@vas-sec.co.il" style="width:100%;padding:10px 12px;border:1.5px solid #E2DFD5;border-radius:10px;font-family:inherit;font-size:14px;background:#FBFAF7;margin-top:8px">
+      <div class="form-actions" style="margin-top:10px">
+        <button class="btn-primary" onclick="saveOfficeEmail()">שמירה</button>
+      </div>
+    </div>`:''}
+    ${isAdmin()?`
+    <div class="card">
       <div class="card-title">🔁 משימות חוזרות ${helpBtn('recurring')} <button class="btn-mini" onclick="openRecForm()">＋ הוספה</button></div>
       ${(S.recurring&&S.recurring.length)?S.recurring.map(r=>`
         <div class="settings-row" onclick="openRecForm('${r.id}')">
@@ -1859,6 +1868,12 @@ function openRecForm(id){
       <button class="btn-primary" onclick="saveRec('${r?r.id:''}')">שמירה</button>
     </div>`);
 }
+async function saveOfficeEmail(){
+  if (!isAdmin()){ toastMsg('למנהלים בלבד'); return; }
+  S.officeEmail = (document.getElementById('officeEmailInput')||{value:''}).value.trim();
+  pushLog('עדכן מייל משרד לחיובים');
+  await persist(); toastMsg('נשמר ✓');
+}
 async function saveRec(id){
   const title = document.getElementById('rf_title').value.trim();
   const days = parseInt(document.getElementById('rf_days').value, 10);
@@ -1883,16 +1898,83 @@ async function deleteRec(id){
   pushLog('🔁 מחק משימה חוזרת');
   await persist(); closeModal(); render(); toastMsg('נמחקה');
 }
+function itemSummaryText(kind, x){
+  const cust = kind === 'task' ? projName(x.projectId) : x.customer;
+  let s = 'לקוח/אתר: ' + cust + '\n';
+  s += 'עבודה: ' + (kind === 'task' ? x.title : x.desc) + '\n';
+  if (x.location) s += 'מיקום: ' + x.location + '\n';
+  s += 'נפתח: ' + fmtDate(x.created) + (x.createdTime ? ' ' + x.createdTime : '') + (x.createdBy ? ' (' + x.createdBy + ')' : '') + '\n';
+  if (x.closedAt) s += 'הושלם: ' + fmtDate(x.closedAt) + (x.closedTime ? ' ' + x.closedTime : '') + (x.closedBy ? ' — ' + x.closedBy : '') + '\n';
+  if (x.report) s += 'דיווח ביצוע: ' + x.report + '\n';
+  if (x.qty) s += 'כמות: ' + x.qty + '\n';
+  if (x.signName || x.signId) s += 'חתימת לקוח: ' + (x.signName || 'חתום') + ' ✓\n';
+  if (x.billing && x.billing.inv) s += 'חשבונית: ' + x.billing.inv + '\n';
+  return s;
+}
+async function openInvoiceDoc(kind, id){
+  if (!isAdmin()){ toastMsg('מסמכי חיוב למנהלים בלבד'); return; }
+  const arr = kind === 'task' ? S.tasks : S.calls;
+  const x = arr.find(i=>i.id===id); if (!x) return;
+  toastMsg('מכין מסמך…');
+  let signImg = '';
+  if (x.signId){ const d = await loadPhotoDoc(x.signId); if (d) signImg = d; }
+  const cust = kind === 'task' ? projName(x.projectId) : x.customer;
+  const w = window.open('', '_blank');
+  if (!w){ toastMsg('הדפדפן חסם חלון — אשרו חלונות קופצים'); return; }
+  w.document.write(`<!DOCTYPE html><html lang="he" dir="rtl"><head><meta charset="UTF-8"><title>אישור ביצוע — ${esc(cust)}</title>
+    <style>
+      body{font-family:'Heebo',Arial,sans-serif;margin:0;padding:30px;color:#1B1F2A;max-width:700px;margin:0 auto}
+      .hd{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #C9962E;padding-bottom:14px;margin-bottom:20px}
+      .brand{font-weight:900;font-size:26px;color:#C9962E}.brand span{color:#1B1F2A;font-weight:300;font-size:16px;letter-spacing:3px}
+      h1{font-size:20px;margin:0 0 4px}
+      table{width:100%;border-collapse:collapse;margin:14px 0}
+      td{padding:9px 12px;border:1px solid #DDD;font-size:14px;vertical-align:top}
+      td.k{background:#F5F3ED;font-weight:800;width:150px}
+      .sig{margin-top:24px;border:1.5px solid #DDD;border-radius:10px;padding:14px;text-align:center}
+      .sig img{max-width:320px;max-height:140px}
+      .ft{margin-top:30px;text-align:center;font-size:12px;color:#888;border-top:1px solid #EEE;padding-top:12px}
+      .np{margin:18px 0;text-align:center}
+      .np button{background:#1B1F2A;color:#fff;border:none;border-radius:10px;padding:12px 26px;font-family:inherit;font-weight:800;font-size:15px;cursor:pointer}
+      @media print{.np{display:none}}
+    </style></head><body>
+    <div class="hd"><div><h1>אישור ביצוע עבודה</h1><div style="font-size:13px;color:#666">מסמך לצירוף לחשבונית</div></div>
+    <div class="brand">VAS <span>SECURITY</span></div></div>
+    <table>
+      <tr><td class="k">לקוח / אתר</td><td>${esc(cust)}</td></tr>
+      <tr><td class="k">עבודה</td><td>${esc(kind==='task'?x.title:x.desc)}</td></tr>
+      ${x.location?`<tr><td class="k">מיקום</td><td>${esc(x.location)}</td></tr>`:''}
+      <tr><td class="k">נפתח</td><td>${fmtDate(x.created)}${x.createdTime?' · '+esc(x.createdTime):''}${x.createdBy?' · '+esc(x.createdBy):''}</td></tr>
+      ${x.closedAt?`<tr><td class="k">הושלם</td><td>${fmtDate(x.closedAt)}${x.closedTime?' · '+esc(x.closedTime):''}${x.closedBy?' · ע"י '+esc(x.closedBy):''}</td></tr>`:''}
+      ${x.report?`<tr><td class="k">דיווח ביצוע</td><td>${esc(x.report)}</td></tr>`:''}
+      ${x.qty?`<tr><td class="k">כמות</td><td>${esc(x.qty)}</td></tr>`:''}
+      ${(x.billing&&x.billing.inv)?`<tr><td class="k">חשבונית</td><td>${esc(x.billing.inv)}</td></tr>`:''}
+    </table>
+    ${signImg?`<div class="sig"><div style="font-weight:800;margin-bottom:8px">✍️ חתימת הלקוח${x.signName?' — '+esc(x.signName):''}</div><img src="${signImg}"></div>`:''}
+    <div class="np"><button onclick="window.print()">🖨️ הדפסה / שמירה כ-PDF</button></div>
+    <div class="ft">VAS Security · ש.ו טכנולוגיות ביטחון בע"מ · הופק ${fmtDate(today())} ${nowTime()}</div>
+    </body></html>`);
+  w.document.close();
+}
+function emailItem(kind, id){
+  if (!isAdmin()){ toastMsg('למנהלים בלבד'); return; }
+  const arr = kind === 'task' ? S.tasks : S.calls;
+  const x = arr.find(i=>i.id===id); if (!x) return;
+  const cust = kind === 'task' ? projName(x.projectId) : x.customer;
+  const to = (S.officeEmail || '');
+  const subject = 'לחיוב: ' + cust + ' — ' + fmtDate(x.closedAt || x.created);
+  const body = itemSummaryText(kind, x) + '\n(מסמך אישור הביצוע עם החתימה — מפיקים בכפתור 🧾 באפליקציה ומצרפים)\n\nVAS Security';
+  location.href = 'mailto:' + encodeURIComponent(to) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+}
 function billingBlock(kind, x){
   const final = kind === 'task' ? ['בוצע','אושר'].includes(x.status) : x.status === 'נסגרה';
   if (!final) return '';
   if (x.billing){
     return x.billing.state === 'billed'
-      ? `<div class="task-actions" style="color:#3E8E5A;font-weight:700;font-size:13px">💳 חויב ✓${x.billing.inv ? ` · חשבונית ${esc(x.billing.inv)}` : ''} (${esc(x.billing.by||'')})</div>`
+      ? `<div class="task-actions" style="color:#3E8E5A;font-weight:700;font-size:13px">💳 חויב ✓${x.billing.inv ? ` · חשבונית ${esc(x.billing.inv)}` : ''} (${esc(x.billing.by||'')})${isAdmin()?`<button class="btn-tiny" onclick="openInvoiceDoc('${kind}','${x.id}')">🧾 מסמך</button>`:''}</div>`
       : `<div class="task-actions" style="color:#8A8F9C;font-weight:700;font-size:13px">➖ ללא חיוב (${esc(x.billing.by||'')})</div>`;
   }
   let h = `<div class="task-actions" style="color:#C9962E;font-weight:800;font-size:13px">💳 ממתין לחיוב`;
-  if (isAdmin()) h += `<button class="btn-tiny ok" onclick="markBilled('${kind}','${x.id}')">✓ חויב</button><button class="btn-tiny" onclick="markNoCharge('${kind}','${x.id}')">ללא חיוב</button>`;
+  if (isAdmin()) h += `<button class="btn-tiny ok" onclick="markBilled('${kind}','${x.id}')">✓ חויב</button><button class="btn-tiny" onclick="markNoCharge('${kind}','${x.id}')">ללא חיוב</button><button class="btn-tiny" onclick="openInvoiceDoc('${kind}','${x.id}')">🧾 מסמך</button><button class="btn-tiny" onclick="emailItem('${kind}','${x.id}')">📧 מייל</button>`;
   return h + `</div>`;
 }
 function markBilled(kind, id){
