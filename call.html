@@ -38,6 +38,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid #C9962E; border-c
 <div class="box">
   <div class="brand">VAS <span>SECURITY</span></div>
   <div class="sub">פתיחת קריאת שירות · ש.ו טכנולוגיות ביטחון</div>
+  <div style="background:#FBF7EE;border:1px dashed #C9962E;border-radius:10px;padding:10px 12px;font-size:13.5px;color:#7A5E1E;font-weight:600;text-align:center;margin-bottom:4px">💡 ככל שתפרטו יותר — נגיע מוכנים עם הציוד המתאים ונטפל מהר יותר</div>
 
   <div id="form">
     <label>שם מלא *</label>
@@ -62,6 +63,21 @@ input:focus, select:focus, textarea:focus { outline: 2px solid #C9962E; border-c
       <option>אחר</option>
     </select>
 
+    <label>סוג הטיפול הנדרש *</label>
+    <select id="f_action">
+      <option value="">— בחרו —</option>
+      <option>תיקון תקלה</option>
+      <option>החלפת רכיב</option>
+      <option>בדיקה / כיול</option>
+      <option>התקנה חדשה / הרחבה</option>
+      <option>פריסת קווים / תשתית</option>
+      <option>העתקת רכיב למיקום אחר</option>
+      <option>אחר</option>
+    </select>
+
+    <label>כמות רכיבים (אם רלוונטי)</label>
+    <input id="f_qty" placeholder="לדוגמה: 3 מצלמות / 2 גלאים / קו אחד">
+
     <label>רמת דחיפות *</label>
     <div class="urg-row" id="urgRow">
       <button type="button" class="urg-btn hot" data-v="דחוף">🔴 דחוף</button>
@@ -70,8 +86,8 @@ input:focus, select:focus, textarea:focus { outline: 2px solid #C9962E; border-c
       <button type="button" class="urg-btn sel" data-v="רגיל">רגיל</button>
     </div>
 
-    <label>תיאור התקלה *</label>
-    <textarea id="f_desc" rows="3" placeholder="תארו בקצרה מה קרה, איפה, וממתי"></textarea>
+    <label>תיאור מפורט *</label>
+    <textarea id="f_desc" rows="4" placeholder="מה קרה, איפה בדיוק, ממתי, כמה רכיבים מעורבים"></textarea>
 
     <input class="hp" id="f_company" tabindex="-1" autocomplete="off">
 
@@ -97,6 +113,20 @@ firebase.initializeApp({
 });
 const db = firebase.firestore();
 let urgency = 'רגיל';
+const TOPIC_HINTS = {
+  'מצלמות אבטחה': 'כמה מצלמות? איפה הן? מה הבעיה — אין תמונה / מטושטש / לא מקליט? נדרש קו או מצלמה חדשה?',
+  'אזעקה / פריצה': 'מה קורה — התראות שווא / אזור לא נדרך / סוללה? איזה אזור? כמה גלאים?',
+  'בקרת כניסה / דלתות': 'איזו דלת/שער? הקורא לא קורא / הדלת לא ננעלת / כרטיסים חדשים? כמה עמדות?',
+  'אינטרקום': 'איזו עמדה/דירה? אין שמע / אין וידאו / הדלת לא נפתחת? כמה שפופרות?',
+  'גילוי אש': 'איזה אזור בלוח? התראת אמת או תקלה? כמה גלאים? יש דרישת מכון תקנים?',
+  'תקשורת / אינטרנט': 'איזה ציוד — ראוטר / סוויץ׳ / נקודות? כמה נקודות? נדרשת פריסה חדשה?',
+  'כריזה': 'איזה אזור לא נשמע? כמה רמקולים? הבעיה בעוצמה או שאין שמע כלל?',
+  'אחר': 'תארו בפירוט: מה, איפה, ממתי, וכמה רכיבים מעורבים'
+};
+document.getElementById('f_topic').addEventListener('change', function(){
+  const h = TOPIC_HINTS[this.value];
+  if (h) document.getElementById('f_desc').placeholder = h;
+});
 document.querySelectorAll('.urg-btn').forEach(b => {
   b.onclick = () => {
     document.querySelectorAll('.urg-btn').forEach(x => x.classList.remove('sel'));
@@ -111,17 +141,23 @@ async function send(){
   const phone = document.getElementById('f_phone').value.trim();
   const site = document.getElementById('f_site').value.trim();
   const topic = document.getElementById('f_topic').value;
+  const action = document.getElementById('f_action').value;
+  const qty = document.getElementById('f_qty').value.trim();
   const desc = document.getElementById('f_desc').value.trim();
   if (document.getElementById('f_company').value) return; /* honeypot */
-  if (!name || !phone || !site || !topic || !desc){
+  if (!name || !phone || !site || !topic || !action || !desc){
     err.textContent = 'נא למלא את כל השדות המסומנים ב-*';
+    return;
+  }
+  if (desc.length < 15){
+    err.textContent = 'תיאור קצר מדי — פרטו מה קרה, איפה וכמה רכיבים, כדי שנגיע מוכנים';
     return;
   }
   const btn = document.getElementById('f_send');
   btn.disabled = true; btn.textContent = 'שולח…';
   try {
     await db.collection('vas_intake').add({
-      name, phone, site, topic, desc, urgency,
+      name, phone, site, topic, action, qty, desc, urgency,
       at: new Date().toISOString()
     });
     document.getElementById('form').style.display = 'none';
