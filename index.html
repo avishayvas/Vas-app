@@ -592,7 +592,7 @@ async function importIntake(docId, d){
     id: uid(), created: today(),
     createdTime: String(dt.getHours()).padStart(2,'0') + ':' + String(dt.getMinutes()).padStart(2,'0'),
     customer: (d.site || '').trim(),
-    desc: (d.topic ? d.topic + ' — ' : '') + (d.desc || ''),
+    desc: (d.topic ? d.topic : '') + (d.action ? ' · ' + d.action : '') + (d.qty ? ' · כמות: ' + d.qty : '') + ((d.desc) ? ' — ' + d.desc : ''),
     phone: (d.phone || '').trim(),
     technician: '', urgency: urgMap[d.urgency] || 'רגיל', status: 'חדשה',
     notes: 'נפתח על ידי הלקוח דרך הטופס' + (d.name ? ' · איש קשר: ' + d.name : ''),
@@ -926,7 +926,7 @@ function taskCard(t){
       ${mediaStrip(taskMedia(t))}
       ${claimBlock('task', t)}
       ${presenceBlock('task', t)}
-      ${t.signId?`<div class="task-actions"><button class="btn-tiny" style="background:#EFF7F0;color:#2C6E48" onclick="openPhoto('${t.signId}')">✍️ חתימת לקוח${t.signName?`: ${esc(t.signName)}`:''}</button></div>`:''}
+      ${t.signId?`<div class="task-actions"><button class="btn-tiny" style="background:#EFF7F0;color:#2C6E48" onclick="openPhoto('${t.signId}')">✍️ חתימת לקוח${t.signName?`: ${esc(t.signName)}`:''}</button></div>`:(!READONLY&&USER?`<div class="task-actions"><button class="btn-tiny" onclick="openSignModal('task','${t.id}')">✍️ החתמת לקוח</button></div>`:'')}
       ${billingBlock('task', t)}
     </div>`;
 }
@@ -1100,7 +1100,7 @@ function renderCalls(){
         ${mediaStrip(c.media)}
         ${claimBlock('call', c)}
         ${presenceBlock('call', c)}
-        ${c.signId?`<div class="task-actions"><button class="btn-tiny" style="background:#EFF7F0;color:#2C6E48" onclick="openPhoto('${c.signId}')">✍️ חתימת לקוח${c.signName?`: ${esc(c.signName)}`:''}</button></div>`:''}
+        ${c.signId?`<div class="task-actions"><button class="btn-tiny" style="background:#EFF7F0;color:#2C6E48" onclick="openPhoto('${c.signId}')">✍️ חתימת לקוח${c.signName?`: ${esc(c.signName)}`:''}</button></div>`:(!READONLY&&USER?`<div class="task-actions"><button class="btn-tiny" onclick="openSignModal('call','${c.id}')">✍️ החתמת לקוח</button></div>`:'')}
         ${billingBlock('call', c)}
       </div>`).join('')}
     ${READONLY?'':'<button class="fab" onclick="openCallForm()">＋ קריאה חדשה</button>'}`;
@@ -1653,6 +1653,37 @@ function openReportModal(kind, id, nextStatus){
       <button class="btn-primary" onclick="applyReport('${kind}','${id}','${esc(nextStatus)}',false)">שמירה וסגירה ✓</button>
     </div>`);
   initSignPad();
+}
+function openSignModal(kind, id){
+  if (!guardEdit()) return;
+  const arr = kind === 'task' ? S.tasks : S.calls;
+  const x = arr.find(i=>i.id===id); if (!x) return;
+  modalShell('✍️ החתמת לקוח', `
+    <div class="settings-sub" style="margin-bottom:8px"><b>${esc(kind==='task'?x.title:x.customer)}</b> — הגישו את המכשיר ללקוח לחתימה:</div>
+    <label>שם החותם</label>
+    <input id="rp_signname" value="${esc(x.signName||'')}" placeholder="שם מלא">
+    <label>חתימה</label>
+    <canvas id="rp_sign" width="640" height="240" style="width:100%;height:130px;border:1.5px dashed #C9962E;border-radius:10px;background:#fff;touch-action:none"></canvas>
+    <div class="task-actions" style="margin-top:6px"><button class="btn-tiny" onclick="clearSign()">✕ ניקוי חתימה</button></div>
+    <div class="form-actions">
+      <button class="btn-primary" onclick="saveSignOnly('${kind}','${id}')">שמירת חתימה ✓</button>
+    </div>`);
+  initSignPad();
+}
+async function saveSignOnly(kind, id){
+  const arr = kind === 'task' ? S.tasks : S.calls;
+  const x = arr.find(i=>i.id===id); if (!x) return;
+  const cv = document.getElementById('rp_sign');
+  if (!cv || !signDirty){ toastMsg('לא צוירה חתימה'); return; }
+  try {
+    const sid = 'sg_' + uid();
+    await savePhotoDoc(sid, cv.toDataURL('image/png'));
+    if (x.signId) deletePhotoDocs([x.signId]);
+    x.signId = sid;
+    x.signName = (document.getElementById('rp_signname')||{value:''}).value.trim();
+    pushLog('✍️ החתים לקוח' + (x.signName ? ' (' + x.signName + ')' : '') + ': ' + (kind==='task'?x.title:x.customer));
+    await persist(); closeModal(); render(); toastMsg('החתימה נשמרה ✓');
+  } catch(e){ toastMsg('שגיאה בשמירת החתימה'); }
 }
 let signDirty = false;
 function initSignPad(){
