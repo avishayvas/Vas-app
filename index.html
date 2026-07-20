@@ -296,7 +296,7 @@ function doLogin(){
   });
 }
 function doLogout(){ if (confirm('להתנתק מהמערכת?')) auth.signOut(); }
-let seenTaskIds = null, seenCallIds = null, seenStatus = null;
+let seenTaskIds = null, seenCallIds = null, seenStatus = null, seenNudge = null;
 function maybeNotifyNew(){
   if (!S) return;
   const tIds = new Set(S.tasks.map(t=>t.id));
@@ -326,6 +326,14 @@ function maybeNotifyNew(){
         notif('✅ קריאה נסגרה — לחיוב', c.customer + ' — ' + (c.desc || '') + (c.updatedBy ? ' · ' + c.updatedBy : ''));
     });
   }
+  const ndMap = {};
+  S.tasks.forEach(t => ndMap['t'+t.id] = t.nudge ? (t.nudge.by + t.nudge.t) : '');
+  S.calls.forEach(c => ndMap['c'+c.id] = c.nudge ? (c.nudge.by + c.nudge.t) : '');
+  if (seenNudge){
+    S.tasks.forEach(t => { const k='t'+t.id; if (ndMap[k] && seenNudge[k] !== ndMap[k] && t.assignee === USER && t.nudge.by !== USER) notif('👉 נדנוד מ' + t.nudge.by, t.title + ' — נא לטפל 🙏'); });
+    S.calls.forEach(c => { const k='c'+c.id; if (ndMap[k] && seenNudge[k] !== ndMap[k] && c.technician === USER && c.nudge.by !== USER) notif('👉 נדנוד מ' + c.nudge.by, c.customer + ' — ' + (c.desc||'') + ' — נא לטפל 🙏'); });
+  }
+  seenNudge = ndMap;
   seenStatus = stMap;
   seenTaskIds = tIds; seenCallIds = cIds;
 }
@@ -925,6 +933,7 @@ function taskCard(t){
       ${t.upsell?`<div class="task-notes" style="background:#EFF7F0;color:#2C6E48;font-weight:600">💰 ${esc(t.upsellType||'מכירה נוספת')}: ${esc(t.upsell)}${t.upsellAmt?` — ${esc(t.upsellAmt)} ₪`:''}${t.updatedBy?` (${esc(t.updatedBy)})`:''}${t.upsellPaid?' · תוגמל ✓':''}</div>`:''}
       ${mediaStrip(taskMedia(t))}
       ${claimBlock('task', t)}
+      ${nudgeBlock('task', t)}
       ${presenceBlock('task', t)}
       ${t.signId?`<div class="task-actions"><button class="btn-tiny" style="background:#EFF7F0;color:#2C6E48" onclick="openPhoto('${t.signId}')">✍️ חתימת לקוח${t.signName?`: ${esc(t.signName)}`:''}</button></div>`:(!READONLY&&USER?`<div class="task-actions"><button class="btn-tiny" onclick="openSignModal('task','${t.id}')">✍️ החתמת לקוח</button></div>`:'')}
       ${billingBlock('task', t)}
@@ -936,6 +945,7 @@ function cycleTaskStatus(id){
   const nextT = STATUSES[(STATUSES.indexOf(t.status)+1)%STATUSES.length];
   if (nextT === 'בוצע'){ openReportModal('task', id, nextT); return; }
   t.status = nextT;
+  t.nudge = null;
   t.updatedBy = USER; t.updatedAt = today();
   if (t.status === 'אושר'){ t.closedBy = USER; t.closedAt = today(); t.closedTime = nowTime(); }
   else { t.closedBy = ''; t.closedAt = ''; }
@@ -1099,6 +1109,7 @@ function renderCalls(){
         ${c.upsell?`<div class="task-notes" style="background:#EFF7F0;color:#2C6E48;font-weight:600">💰 ${esc(c.upsellType||'מכירה נוספת')}: ${esc(c.upsell)}${c.upsellAmt?` — ${esc(c.upsellAmt)} ₪`:''}${c.updatedBy?` (${esc(c.updatedBy)})`:''}${c.upsellPaid?' · תוגמל ✓':''}</div>`:''}
         ${mediaStrip(c.media)}
         ${claimBlock('call', c)}
+        ${nudgeBlock('call', c)}
         ${presenceBlock('call', c)}
         ${c.signId?`<div class="task-actions"><button class="btn-tiny" style="background:#EFF7F0;color:#2C6E48" onclick="openPhoto('${c.signId}')">✍️ חתימת לקוח${c.signName?`: ${esc(c.signName)}`:''}</button></div>`:(!READONLY&&USER?`<div class="task-actions"><button class="btn-tiny" onclick="openSignModal('call','${c.id}')">✍️ החתמת לקוח</button></div>`:'')}
         ${billingBlock('call', c)}
@@ -1111,6 +1122,7 @@ function cycleCallStatus(id){
   const nextC = CALL_STATUSES[(CALL_STATUSES.indexOf(c.status)+1)%CALL_STATUSES.length];
   if (nextC === 'נסגרה'){ openReportModal('call', id, nextC); return; }
   c.status = nextC;
+  c.nudge = null;
   c.updatedBy = USER; c.updatedAt = today();
   if (c.status === 'נסגרה'){ c.closedBy = USER; c.closedAt = today(); c.closedTime = nowTime(); }
   else { c.closedBy = ''; c.closedAt = ''; }
@@ -1545,6 +1557,7 @@ function openMemberForm(id){
     <label>שם *</label><input id="mf_name" value="${esc(f.name)}">
     <label>תפקיד</label><input id="mf_role" value="${esc(f.role)}">
     <label>אימייל כניסה</label><input id="mf_email" value="${esc(f.email||'')}" inputmode="email" dir="ltr" placeholder="igor@vas-sec.co.il">
+    <label>טלפון (לנדנודים בוואטסאפ)</label><input id="mf_phone" value="${esc(f.phone||'')}" inputmode="tel" placeholder="050-0000000">
     <label>סוג</label>
     <select id="mf_kind"><option value="עובד"${f.kind==='עובד'?' selected':''}>עובד</option><option value="קבלן"${f.kind==='קבלן'?' selected':''}>קבלן משנה</option></select>
     <div class="form-actions">
@@ -1560,6 +1573,7 @@ async function saveMember(id){
   m.name = name;
   m.role = document.getElementById('mf_role').value.trim();
   m.email = (document.getElementById('mf_email')||{value:''}).value.trim();
+  m.phone = (document.getElementById('mf_phone')||{value:''}).value.trim();
   m.kind = document.getElementById('mf_kind').value;
   if (!id) S.team.push(m);
   await persist(); closeModal(); render(); toastMsg('איש הצוות נשמר ✓');
@@ -1735,6 +1749,7 @@ async function applyReport(kind, id, nextStatus, skip){
     }
   }
   x.status = nextStatus;
+  x.nudge = null;
   x.updatedBy = USER; x.updatedAt = today();
   if (kind === 'task'){
     if (x.status === 'אושר'){ x.closedBy = USER; x.closedAt = today(); x.closedTime = nowTime(); } else { x.closedBy = ''; x.closedAt = ''; x.closedTime = ''; }
@@ -1964,6 +1979,48 @@ function emailItem(kind, id){
   const subject = 'לחיוב: ' + cust + ' — ' + fmtDate(x.closedAt || x.created);
   const body = itemSummaryText(kind, x) + '\n(מסמך אישור הביצוע עם החתימה — מפיקים בכפתור 🧾 באפליקציה ומצרפים)\n\nVAS Security';
   location.href = 'mailto:' + encodeURIComponent(to) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+}
+function nudgeBlock(kind, x){
+  const final = kind === 'task' ? ['בוצע','אושר'].includes(x.status) : x.status === 'נסגרה';
+  const assignee = kind === 'task' ? x.assignee : x.technician;
+  let h = '';
+  if (x.nudge){
+    h += `<div class="req-banner" style="border-color:#D64545;background:#FBEAEA;color:#B33">👉 <b>${esc(x.nudge.by)}</b> מבקש לטפל בזה · ${esc(x.nudge.t||'')}`;
+    if (USER === assignee) h += `<button class="btn-tiny ok" onclick="ackNudge('${kind}','${x.id}')">קיבלתי ✓</button>`;
+    else if (isAdmin()) h += `<button class="btn-tiny" onclick="ackNudge('${kind}','${x.id}')">✕ ביטול</button>`;
+    h += `</div>`;
+  } else if (isAdmin() && !final && assignee && assignee !== USER){
+    h += `<div class="task-actions"><button class="btn-tiny" style="background:#FBEAEA;color:#B33" onclick="sendNudge('${kind}','${x.id}')">👉 נדנוד ל${esc(assignee)}</button></div>`;
+  }
+  return h;
+}
+function sendNudge(kind, id){
+  if (!isAdmin()){ toastMsg('נדנודים למנהלים בלבד'); return; }
+  const arr = kind === 'task' ? S.tasks : S.calls;
+  const x = arr.find(i=>i.id===id); if (!x) return;
+  const assignee = kind === 'task' ? x.assignee : x.technician;
+  if (!assignee){ toastMsg('קודם שבצו טכנאי למשימה'); return; }
+  x.nudge = { by: USER, d: today(), t: nowTime() };
+  const label = kind === 'task' ? x.title : (x.customer + ' — ' + x.desc);
+  pushLog('👉 שלח נדנוד ל' + assignee + ': ' + label);
+  persist(); render();
+  const m = S.team.find(tm => tm.name === assignee);
+  const phone = m && m.phone ? m.phone.replace(/\D/g, '') : '';
+  if (phone){
+    const intl = phone.startsWith('972') ? phone : '972' + phone.replace(/^0/, '');
+    const waMsg = '👉 תזכורת מהמערכת של VAS:\n' + label + (x.location ? '\n📍 ' + x.location : '') + '\nנא לטפל 🙏 — ' + USER;
+    window.open('https://wa.me/' + intl + '?text=' + encodeURIComponent(waMsg), '_blank');
+    toastMsg('נדנוד נשלח באפליקציה + נפתח וואטסאפ 👉');
+  } else {
+    toastMsg('נדנוד נשלח באפליקציה 👉 (להוסיף וואטסאפ — הזינו טלפון לעובד בניהול ← צוות)');
+  }
+}
+function ackNudge(kind, id){
+  const arr = kind === 'task' ? S.tasks : S.calls;
+  const x = arr.find(i=>i.id===id); if (!x || !x.nudge) return;
+  pushLog((USER === (kind==='task'?x.assignee:x.technician) ? 'אישר קבלת נדנוד' : 'ביטל נדנוד') + ': ' + (kind==='task'?x.title:x.customer));
+  x.nudge = null;
+  persist(); render(); toastMsg('✓');
 }
 function billingBlock(kind, x){
   const final = kind === 'task' ? ['בוצע','אושר'].includes(x.status) : x.status === 'נסגרה';
