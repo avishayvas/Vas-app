@@ -593,7 +593,7 @@ function startData(){
   try {
     db.collection('vas_intake').onSnapshot(qs => {
       if (!S) return;
-      qs.docChanges().forEach(ch => { if (ch.type === 'added') importIntake(ch.doc.id, ch.doc.data()); });
+      qs.docChanges().forEach(ch => { if (ch.type === 'added' && ch.doc.data().t !== 'ph') importIntake(ch.doc.id, ch.doc.data()); });
     }, () => {});
   } catch(e){}
 }
@@ -611,8 +611,23 @@ async function importIntake(docId, d){
     notes: 'נפתח על ידי הלקוח דרך הטופס' + (d.name ? ' · איש קשר: ' + d.name : ''),
     createdBy: 'לקוח: ' + (d.name || 'טופס')
   };
+  if (d.photoIds && d.photoIds.length){
+    c.media = [];
+    for (const pid of d.photoIds){
+      try {
+        const ps = await db.collection('vas_intake').doc(pid).get();
+        const pd = ps.exists ? ps.data() : null;
+        if (pd && pd.data){
+          const nid = 'ph_' + uid();
+          await savePhotoDoc(nid, pd.data);
+          c.media.push({ id: nid, kind: 'image' });
+        }
+        await db.collection('vas_intake').doc(pid).delete();
+      } catch(e){}
+    }
+  }
   S.calls.unshift(c);
-  pushLog('📥 קריאה חדשה מטופס לקוח: ' + c.customer);
+  pushLog('📥 קריאה חדשה מטופס לקוח: ' + c.customer + (c.media && c.media.length ? ' (' + c.media.length + ' תמונות)' : ''));
   await persist();
   render();
   toastMsg('📥 קריאה חדשה מלקוח: ' + c.customer);
