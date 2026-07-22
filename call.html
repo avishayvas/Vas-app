@@ -91,6 +91,11 @@ input:focus, select:focus, textarea:focus { outline: 2px solid #C9962E; border-c
       <button type="button" class="urg-btn sel" data-v="רגיל">רגיל</button>
     </div>
 
+    <label>📷 תמונות מהאתר (עד 3, לא חובה)</label>
+    <input type="file" id="f_photos" accept="image/*" multiple style="display:none" onchange="addPhotos(this.files)">
+    <button type="button" onclick="document.getElementById('f_photos').click()" style="width:100%;padding:12px;border:1.5px dashed #C9962E;border-radius:10px;background:#FBF7EE;color:#7A5E1E;font-family:inherit;font-weight:700;font-size:14px;cursor:pointer">📷 צילום / בחירת תמונות</button>
+    <div id="thumbs" style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"></div>
+
     <label>תיאור מפורט *</label>
     <textarea id="f_desc" rows="4" placeholder="מה קרה, איפה בדיוק, ממתי, כמה רכיבים מעורבים"></textarea>
 
@@ -118,6 +123,35 @@ firebase.initializeApp({
 });
 const db = firebase.firestore();
 let urgency = 'רגיל';
+let pendingPhotos = [];
+function addPhotos(files){
+  const remain = 3 - pendingPhotos.length;
+  [...files].slice(0, remain).forEach(f => {
+    const r = new FileReader();
+    r.onload = () => compressImage(r.result, dataUrl => { pendingPhotos.push(dataUrl); renderThumbs(); });
+    r.readAsDataURL(f);
+  });
+  if (files.length > remain) alert('עד 3 תמונות');
+  document.getElementById('f_photos').value = '';
+}
+function compressImage(src, cb){
+  const img = new Image();
+  img.onload = () => {
+    const max = 1200;
+    let w = img.width, h = img.height;
+    if (w > max || h > max){ const k = max / Math.max(w, h); w = Math.round(w*k); h = Math.round(h*k); }
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    cv.getContext('2d').drawImage(img, 0, 0, w, h);
+    cb(cv.toDataURL('image/jpeg', 0.72));
+  };
+  img.src = src;
+}
+function renderThumbs(){
+  document.getElementById('thumbs').innerHTML = pendingPhotos.map((p,i)=>
+    `<div style="position:relative"><img src="${p}" style="width:74px;height:74px;object-fit:cover;border-radius:10px;border:1.5px solid #DDD9CC">
+     <button type="button" onclick="pendingPhotos.splice(${i},1);renderThumbs()" style="position:absolute;top:-6px;left:-6px;width:22px;height:22px;border-radius:50%;border:none;background:#D64545;color:#fff;font-weight:800;cursor:pointer;line-height:1">✕</button></div>`).join('');
+}
 const TOPIC_HINTS = {
   'מצלמות אבטחה': 'כמה מצלמות? איפה הן? מה הבעיה — אין תמונה / מטושטש / לא מקליט? נדרש קו או מצלמה חדשה?',
   'אזעקה / פריצה': 'מה קורה — התראות שווא / אזור לא נדרך / סוללה? איזה אזור? כמה גלאים?',
@@ -161,8 +195,13 @@ async function send(){
   const btn = document.getElementById('f_send');
   btn.disabled = true; btn.textContent = 'שולח…';
   try {
+    const photoIds = [];
+    for (const p of pendingPhotos){
+      const ref = await db.collection('vas_intake').add({ t: 'ph', data: p });
+      photoIds.push(ref.id);
+    }
     await db.collection('vas_intake').add({
-      name, phone, site, topic, action, qty, desc, urgency,
+      name, phone, site, topic, action, qty, desc, urgency, photoIds,
       at: new Date().toISOString()
     });
     document.getElementById('form').style.display = 'none';
