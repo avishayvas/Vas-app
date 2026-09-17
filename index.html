@@ -2677,7 +2677,10 @@ function openWlogView(id){
       ${l.companyNotes?`<div class="wl-sec">הערות נציג החברה</div><div>${esc(l.companyNotes)}</div>`:''}
       ${l.signId?`<div class="wl-sec">חתימת המזמין${l.signName?' — '+esc(l.signName):''}</div><img class="wl-sign" data-photoid="${esc(l.signId)}" alt="חתימה">`:''}
     </div>
-    <div class="form-actions">
+    <div class="form-actions" style="flex-wrap:wrap">
+      <button class="btn-primary" onclick="printWlog('${l.id}')">🖨️ הדפסה / PDF</button>
+      ${wlAdmin()?`<button class="btn-secondary" onclick="exportOneWlog('${l.id}')">📊 אקסל של היומן הזה</button>`:''}
+      <button class="btn-secondary" onclick="waWlog('${l.id}')">💬 וואטסאפ</button>
       ${canEdit?`<button class="btn-secondary" onclick="openWlogForm('${l.id}')">✏️ עריכה</button>`:''}
       ${wlAdmin()?`<button class="btn-tiny" style="background:#D64545" onclick="deleteWlog('${l.id}')">🗑 מחיקה</button>`:''}
     </div>`);
@@ -3075,6 +3078,115 @@ function buildWlogWorkbook(logs, tasks, calls){
     r = R(['חתימת המזמין / המפקח','','','חתימת נציג החברה','',''],{center:true}); M(r,1,3); M(r,4,6);
   });
   return wb;
+}
+
+/* ---------- הדפסה / PDF במבנה הטופס ---------- */
+async function printWlog(id){
+  const l = WLOGS.find(x=>x.id===id); if(!l) return;
+  toastMsg('מכין מסמך…');
+  let signImg = '';
+  if (l.signId){ const d = await loadPhotoDoc(l.signId); if (d) signImg = d; }
+  const w = window.open('', '_blank');
+  if (!w){ toastMsg('הדפדפן חסם חלון — אשרו חלונות קופצים'); return; }
+  const siteExtra = [l.site&&l.site.address, l.site&&l.site.client, l.site&&l.site.phone, l.site&&l.site.notes].filter(Boolean).join(' · ');
+  w.document.write(`<!DOCTYPE html><html lang="he" dir="rtl"><head><meta charset="UTF-8">
+    <title>יומן עבודה ${wlNum(l.number)} — ${esc(wlSiteName(l))}</title>
+    <style>
+      body{font-family:'Heebo',Arial,sans-serif;margin:0 auto;padding:26px;color:#1B1F2A;max-width:760px}
+      .hd{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #C9962E;padding-bottom:12px;margin-bottom:6px}
+      .brand{font-weight:900;font-size:24px;color:#C9962E}
+      .brand span{color:#1B1F2A;font-weight:300;font-size:15px;letter-spacing:3px}
+      h1{font-size:23px;margin:10px 0 2px}
+      .num{font:700 22px ui-monospace,monospace;color:#D64545;letter-spacing:1px}
+      table{width:100%;border-collapse:collapse;margin:10px 0}
+      th,td{border:1px solid #1B1F2A;padding:7px 9px;font-size:14px;vertical-align:top}
+      th{background:#E6ECFB;font-size:13px}
+      td.k{background:#F5F3ED;font-weight:800;width:110px}
+      .cap{background:#E6ECFB;border:1px solid #1B1F2A;border-bottom:0;padding:6px;text-align:center;font-weight:800;font-size:14px}
+      .notes{display:flex;gap:10px;margin-top:10px}
+      .notes>div{flex:1;border:1px solid #1B1F2A;min-height:78px}
+      .notes .t{background:#E6ECFB;border-bottom:1px solid #1B1F2A;padding:5px;font-weight:800;font-size:13px;text-align:center}
+      .notes .b{padding:8px;font-size:14px;white-space:pre-wrap}
+      .sigs{display:flex;gap:10px;margin-top:10px}
+      .sigs>div{flex:1;border:1px solid #1B1F2A;text-align:center}
+      .sigs .t{background:#E6ECFB;border-bottom:1px solid #1B1F2A;padding:5px;font-weight:800;font-size:13px}
+      .sigs .b{height:104px;display:flex;align-items:center;justify-content:center}
+      .sigs img{max-width:94%;max-height:96px}
+      .np{margin:20px 0;text-align:center}
+      .np button{background:#1B1F2A;color:#fff;border:0;border-radius:10px;padding:12px 26px;font-family:inherit;font-weight:800;font-size:15px;cursor:pointer}
+      .ft{margin-top:22px;text-align:center;font-size:11px;color:#888;border-top:1px solid #EEE;padding-top:10px}
+      @media print{.np{display:none} body{padding:0}}
+    </style></head><body>
+    <div class="hd">
+      <div><h1>יומן עבודה מס' <span class="num">${wlNum(l.number)}</span></h1>
+      <div style="font-size:13px;color:#666">ש.ו טכנולוגיות ביטחון בע"מ</div></div>
+      <div style="text-align:left"><div class="brand">VAS <span>SECURITY</span></div>
+      <div style="font-size:10px;color:#888;letter-spacing:2px;text-align:center">TECHNOLOGY LTD</div></div>
+    </div>
+    <table>
+      <tr><td class="k">תאריך</td><td>${fmtDate(l.date)}</td><td class="k">פרויקט / אתר</td><td>${esc(wlSiteName(l))}${l.site&&l.site.kind==='casual'?' (מזדמן)':''}</td></tr>
+      ${siteExtra?`<tr><td class="k">פרטי האתר</td><td colspan="3">${esc(siteExtra)}</td></tr>`:''}
+      <tr><td class="k">מילא היומן</td><td colspan="3">${esc(l.createdByName||'')}</td></tr>
+    </table>
+    <div class="cap">תאור העבודה שבוצעה</div>
+    <table style="margin-top:0">
+      <tr><th style="width:38px">מס'</th><th>תיאור</th><th style="width:80px">כמות</th><th style="width:74px">יחידה</th></tr>
+      ${(l.work||[]).map((x,i)=>`<tr><td style="text-align:center">${i+1}</td><td>${esc(x.desc)}</td><td style="text-align:center">${esc(String(x.qty))}</td><td style="text-align:center">${esc(x.unit)}</td></tr>`).join('')}
+    </table>
+    <div class="cap">עובדים ושעות</div>
+    <table style="margin-top:0">
+      <tr><th style="width:38px">מס'</th><th>שם העובד</th><th style="width:74px">משעה</th><th style="width:74px">עד שעה</th><th style="width:74px">סה"כ</th><th>הערות</th></tr>
+      ${(l.crew||[]).map((c,i)=>`<tr><td style="text-align:center">${i+1}</td><td>${esc(c.name)}</td><td style="text-align:center">${esc(c.from)}</td><td style="text-align:center">${esc(c.to)}</td><td style="text-align:center">${c.hours}</td><td>${esc(c.note||'')}</td></tr>`).join('')}
+      <tr><th colspan="4">סה"כ שעות</th><th>${l.totalHours||0}</th><th></th></tr>
+    </table>
+    <div class="notes">
+      <div><div class="t">הערות / הוראות המזמין / המפקח</div><div class="b">${esc(l.clientNotes||'')}</div></div>
+      <div><div class="t">הערות נציג החברה</div><div class="b">${esc(l.companyNotes||'')}</div></div>
+    </div>
+    <div class="sigs">
+      <div><div class="t">חתימת המזמין / המפקח${l.signName?' — '+esc(l.signName):''}</div><div class="b">${signImg?`<img src="${signImg}" alt="חתימה">`:''}</div></div>
+      <div><div class="t">נציג החברה — ${esc(l.createdByName||'')}</div><div class="b"></div></div>
+    </div>
+    <div class="np"><button onclick="window.print()">🖨️ הדפסה / שמירה כ-PDF</button></div>
+    <div class="ft">VAS Security Technology LTD · הופק ${fmtDate(today())} ${nowTime()}</div>
+    </body></html>`);
+  w.document.close();
+}
+function wlogText(l){
+  let m = `*יומן עבודה מס' ${wlNum(l.number)}*\n📅 ${fmtDate(l.date)} · ${wlSiteName(l)}\n`;
+  if (l.site && l.site.address) m += `📍 ${l.site.address}\n`;
+  m += `\n*בוצע:*\n`;
+  (l.work||[]).forEach((w,i)=>{ m += `${i+1}. ${w.desc} — ${w.qty} ${w.unit}\n`; });
+  m += `\n*עובדים:*\n`;
+  (l.crew||[]).forEach(c=>{ m += `▫️ ${c.name} ${c.from}–${c.to} (${c.hours} ש')\n`; });
+  m += `סה"כ ${l.totalHours||0} שעות\n`;
+  if (l.clientNotes) m += `\nהערות המזמין: ${l.clientNotes}\n`;
+  if (l.companyNotes) m += `הערות נציג החברה: ${l.companyNotes}\n`;
+  if (l.signId) m += `\n✍️ היומן חתום על ידי המזמין${l.signName?' ('+l.signName+')':''}`;
+  m += `\n\n_VAS Security Technology LTD_`;
+  return m;
+}
+function waWlog(id){
+  const l = WLOGS.find(x=>x.id===id); if(!l) return;
+  window.open('https://wa.me/?text=' + encodeURIComponent(wlogText(l)), '_blank');
+}
+function exportOneWlog(id){
+  const l = WLOGS.find(x=>x.id===id); if(!l) return;
+  if (!wlAdmin()){ toastMsg('למנהלים בלבד'); return; }
+  withExcelJS(async () => {
+    try {
+      if (l.signId) await loadMediaDoc(l.signId);
+      const wb = buildWlogWorkbook([l], [], []);
+      const buf = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buf], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'יומן-' + wlNum(l.number) + '.xlsx';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+      toastMsg('קובץ האקסל ירד ✓');
+    } catch(e){ console.error(e); toastMsg('שגיאה ביצירת האקסל'); }
+  });
 }
 
 </script>
