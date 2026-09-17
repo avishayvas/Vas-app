@@ -141,6 +141,31 @@ main { padding: 14px 14px 20px; max-width: 760px; margin: 0 auto; }
   .kpi-value { font-size: 24px; }
   .proj-bar-name { width: 44%; font-size: 12px; }
 }
+/* ===== יומן עבודה ===== */
+.wl-num{font:700 13px ui-monospace,Menlo,Consolas,monospace;color:#C9962E;flex-shrink:0}
+.wl-tabs{display:flex;gap:6px}
+.wl-tabs .wl-on{background:#1B3A6B;color:#fff}
+.wl-sec{margin:14px 0 6px;font-weight:800;font-size:13px;color:#1B3A6B;border-bottom:1.5px solid #E6ECFB;padding-bottom:4px}
+.wl-head{display:flex;gap:12px;flex-wrap:wrap;background:#F4F6FA;border-radius:10px;padding:10px;margin-bottom:10px;font-size:13px}
+.wl-casual{background:#FBF3C4;border:1px dashed #C9962E;border-radius:10px;padding:10px;margin-top:8px}
+.wl-line{display:grid;grid-template-columns:20px 1fr 66px 74px 28px;gap:5px;align-items:center;margin-bottom:6px}
+.wl-line.wl-crew{grid-template-columns:20px 1fr 84px 84px 42px 1fr 28px}
+.wl-line input,.wl-line select{margin:0!important;padding:8px 6px!important;font-size:15px}
+.wl-i{font:600 12px ui-monospace,monospace;color:#8A8F9C;text-align:center}
+.wl-h{font:700 14px ui-monospace,monospace;color:#1B3A6B;text-align:center}
+.wl-x{border:0;background:transparent;color:#D64545;font-size:17px;cursor:pointer;padding:2px}
+.wl-view{font-size:14px}
+.wl-row{display:flex;gap:8px;justify-content:space-between;border-bottom:1px solid #EEF1F6;padding:6px 0}
+.wl-sign{width:100%;max-width:320px;background:#fff;border:1px solid #DDE3EC;border-radius:8px}
+@media (max-width:560px){
+  .wl-line{grid-template-columns:20px 1fr 28px;grid-template-areas:"i d x" ". q q"}
+  .wl-line>.wl-i{grid-area:i}.wl-line>.wl-desc{grid-area:d}.wl-line>.wl-x{grid-area:x}
+  .wl-line>.wl-q{grid-area:q}.wl-line>.wl-u{grid-area:q;justify-self:end;max-width:46%}
+  .wl-line.wl-crew{grid-template-columns:20px 1fr 1fr 28px;grid-template-areas:"i d d x" ". t1 t2 h" ". n n n"}
+  .wl-crew>.wl-t:nth-of-type(1){grid-area:t1}.wl-crew>.wl-t:nth-of-type(2){grid-area:t2}
+  .wl-crew>.wl-h{grid-area:h}.wl-crew>.wl-n{grid-area:n}
+}
+
 </style>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -546,9 +571,11 @@ auth.onAuthStateChanged(u => {
   if (u){
     ls.style.display = 'none';
     startData();
+    startWlogSync();
   } else {
     if (unsubData){ unsubData(); unsubData = null; }
     if (unsubLeads){ unsubLeads(); unsubLeads = null; }
+    stopWlogSync();
     LEADS = [];
     S = null; USER = '';
     document.getElementById('app').innerHTML = '<div class="card empty">נדרשת התחברות</div>';
@@ -750,7 +777,7 @@ function compressImage(file, maxDim=900, quality=0.72){
 }
 
 /* ==================== Nav ==================== */
-const NAV = [['home','🏠','ראשי'],['tasks','📋','משימות'],['calls','🛠️','קריאות'],['reports','📤','דוחות'],['settings','⚙️','ניהול']];
+const NAV = [['home','🏠','ראשי'],['tasks','📋','משימות'],['calls','🛠️','קריאות'],['wlog','📝','יומן'],['reports','📤','דוחות'],['settings','⚙️','ניהול']];
 function renderNav(){
   document.getElementById('nav').innerHTML = NAV.map(([k,ic,label]) =>
     `<button class="vas-nav-btn${tab===k?' active':''}" onclick="goTab('${k}')"><span class="ic">${ic}</span><span>${label}</span></button>`
@@ -768,6 +795,7 @@ function render(){
   if (tab==='home') app.innerHTML = renderHome();
   else if (tab==='tasks') app.innerHTML = renderTasks();
   else if (tab==='calls') app.innerHTML = renderCalls();
+  else if (tab==='wlog') app.innerHTML = renderWlog();
   else if (tab==='reports') app.innerHTML = renderReports();
   else app.innerHTML = renderSettings();
   hydratePhotos();
@@ -1422,6 +1450,7 @@ function renderReports(){
   const projRep = reportProj ? buildProjReport(reportProj) : '';
   const persRep = reportPerson ? buildPersonReport(reportPerson) : '';
   return `
+    ${wlogReportCard()}
     <div class="card">
       <div class="card-title">📅 דוח יומי — בוצע / נותר לביצוע ${helpBtn('daily')}</div>
       <input type="date" value="${esc(reportDate)}" onchange="reportDate=this.value;render()">
@@ -2562,6 +2591,492 @@ function copyViewLink(){
   const url = location.origin + location.pathname + '?view=1';
   copyText(url); toastMsg('קישור הצפייה הועתק');
 }
+
+/* ==================== יומן עבודה — מודול ==================== */
+const WL_COL = db.collection('worklogs');
+const WL_META = db.collection('worklog_meta');
+const WL_SITES = db.collection('worklog_sites');
+const WL_ADMIN_EMAILS = ['avishay@s-vsecurity.com','office@s-vsecurity.com'];
+const WL_UNITS = ["יח'","מ'","נק'","קומפ'","שעות","ימים"];
+const WL_FIRST_NUMBER = 1;
+const wlAdmin = () => !!authUser && WL_ADMIN_EMAILS.includes((authUser.email||'').toLowerCase());
+let WLOGS = [], unsubWL = null, WF = null, wlShowAll = false;
+let wlFrom = '', wlTo = '';
+
+function startWlogSync(){
+  if (unsubWL || !authUser) return;
+  const q = wlAdmin() ? WL_COL : WL_COL.where('createdBy','==',authUser.uid);
+  unsubWL = q.onSnapshot(qs => {
+    WLOGS = qs.docs.map(d=>d.data()).sort((a,b)=>(b.date+(b.createdAt||'')).localeCompare(a.date+(a.createdAt||'')));
+    if (S && tab==='wlog') render();
+  }, e => { console.warn('worklogs:', e.code); });
+  WL_SITES.get().then(qs => { WLSITES = qs.docs.map(d=>d.data()); }).catch(()=>{});
+}
+let WLSITES = [];
+function stopWlogSync(){ if (unsubWL){ unsubWL(); unsubWL = null; } WLOGS = []; }
+
+const wlHours = (a,b) => { if(!a||!b) return 0; const [h1,m1]=a.split(':').map(Number), [h2,m2]=b.split(':').map(Number);
+  const t=(h2*60+m2)-(h1*60+m1); return t>0 ? Math.round(t/60*100)/100 : 0; };
+const wlTotal = f => (f.crew||[]).reduce((s,c)=>s+wlHours(c.from,c.to),0);
+const wlNum = n => n==null ? '----' : String(n).padStart(4,'0');
+const wlQty = v => { const n = parseFloat(String(v==null?'':v).replace(',','.')); return isNaN(n) ? (v||'') : n; };
+const wlSiteName = l => l.site && l.site.name ? l.site.name : projName(l.projectId);
+
+/* ---------- רשימה ---------- */
+function renderWlog(){
+  const mine = WLOGS.filter(l => wlShowAll || l.createdBy === (authUser&&authUser.uid));
+  const t = today();
+  const todays = WLOGS.filter(l=>l.date===t);
+  return `
+    <div class="card">
+      <div class="card-title">📝 יומן עבודה — ${esc(fmtDate(t))}</div>
+      <div class="settings-sub">התאריך והשם נרשמים אוטומטית. כל שורת עבודה חייבת כמות, כדי שאפשר יהיה להוציא חשבון.</div>
+      <div class="form-actions">
+        <button class="btn-primary" onclick="openWlogForm()">＋ יומן עבודה חדש להיום</button>
+      </div>
+      ${todays.length?`<div class="settings-sub" style="margin-top:8px">היום דווחו ${todays.length} יומנים${wlAdmin()?' · '+esc(todays.map(l=>l.createdByName).join(', ')):''}</div>`:''}
+    </div>
+    ${wlAdmin()?`<div class="card" style="padding-bottom:6px">
+      <div class="wl-tabs">
+        <button class="btn-tiny${wlShowAll?'':' wl-on'}" onclick="wlShowAll=false;render()">היומנים שלי</button>
+        <button class="btn-tiny${wlShowAll?' wl-on':''}" onclick="wlShowAll=true;render()">כל הצוות</button>
+      </div>
+    </div>`:''}
+    <div class="card">
+      <div class="card-title">יומנים אחרונים (${mine.length})</div>
+      ${mine.length ? mine.slice(0,60).map(wlogCard).join('') : '<div class="empty">אין יומנים להצגה</div>'}
+    </div>`;
+}
+function wlogCard(l){
+  const lines = (l.work||[]).length;
+  return `<div class="mini-task" onclick="openWlogView('${l.id}')">
+    <span class="wl-num">${wlNum(l.number)}</span>
+    <div style="flex:1">
+      <div class="mini-task-title">${esc(wlSiteName(l))}${l.site&&l.site.kind==='casual'?' <span style="font-weight:400;color:#8A8F9C">· מזדמן</span>':''}</div>
+      <div class="mini-task-sub">${esc(fmtDate(l.date))} · ${esc(l.createdByName||'')} · ${lines} שורות עבודה · ${wlTotal(l)} ש'${l.signId?' · ✍️ חתום':''}</div>
+    </div>
+  </div>`;
+}
+
+/* ---------- צפייה ---------- */
+function openWlogView(id){
+  const l = WLOGS.find(x=>x.id===id); if(!l) return;
+  const canEdit = wlAdmin() || (l.createdBy===(authUser&&authUser.uid) && l.date===today());
+  modalShell("יומן עבודה מס' " + wlNum(l.number), `
+    <div class="wl-view">
+      <div><b>תאריך:</b> ${esc(fmtDate(l.date))} · <b>מילא:</b> ${esc(l.createdByName||'')}</div>
+      <div><b>פרויקט / אתר:</b> ${esc(wlSiteName(l))}</div>
+      ${[l.site&&l.site.address,l.site&&l.site.client,l.site&&l.site.phone,l.site&&l.site.notes].some(Boolean)?
+        `<div class="settings-sub">${esc([l.site.address,l.site.client,l.site.phone,l.site.notes].filter(Boolean).join(' · '))}</div>`:''}
+      <div class="wl-sec">תאור העבודה שבוצעה</div>
+      ${(l.work||[]).map((w,i)=>`<div class="wl-row"><span>${i+1}. ${esc(w.desc)}</span><b>${esc(String(w.qty))} ${esc(w.unit)}</b></div>`).join('')}
+      <div class="wl-sec">עובדים ושעות</div>
+      ${(l.crew||[]).map(c=>`<div class="wl-row"><span>${esc(c.name)}${c.note?' · '+esc(c.note):''}</span><b>${esc(c.from)}–${esc(c.to)} · ${c.hours} ש'</b></div>`).join('')}
+      <div class="wl-row" style="font-weight:800"><span>סה"כ שעות</span><b>${wlTotal(l)}</b></div>
+      ${l.clientNotes?`<div class="wl-sec">הערות המזמין / המפקח</div><div>${esc(l.clientNotes)}</div>`:''}
+      ${l.companyNotes?`<div class="wl-sec">הערות נציג החברה</div><div>${esc(l.companyNotes)}</div>`:''}
+      ${l.signId?`<div class="wl-sec">חתימת המזמין${l.signName?' — '+esc(l.signName):''}</div><img class="wl-sign" data-photoid="${esc(l.signId)}" alt="חתימה">`:''}
+    </div>
+    <div class="form-actions">
+      ${canEdit?`<button class="btn-secondary" onclick="openWlogForm('${l.id}')">✏️ עריכה</button>`:''}
+      ${wlAdmin()?`<button class="btn-tiny" style="background:#D64545" onclick="deleteWlog('${l.id}')">🗑 מחיקה</button>`:''}
+    </div>`);
+  hydratePhotos();
+}
+
+/* ---------- טופס ---------- */
+function openWlogForm(id){
+  if (!guardEdit()) return;
+  const ex = id ? WLOGS.find(x=>x.id===id) : null;
+  WF = ex ? JSON.parse(JSON.stringify(ex)) : {
+    id: 'wl_'+uid(), number: null, date: today(), projectId: '', siteSel: '',
+    site: { kind:'fixed', name:'', address:'', client:'', phone:'', notes:'' },
+    work: [{desc:'',qty:'',unit:"יח'"},{desc:'',qty:'',unit:"יח'"}],
+    crew: [{name:USER, from:'07:00', to:'', note:''}],
+    clientNotes:'', companyNotes:'', signName:'', saveSite:true
+  };
+  if (ex) WF.siteSel = ex.site && ex.site.kind==='casual' ? 'casual:'+(ex.site.name||'') : 'p:'+ex.projectId;
+  modalShell(ex ? "עריכת יומן " + wlNum(ex.number) : 'יומן עבודה חדש', `
+    <div class="wl-head">
+      <div><span class="settings-sub">תאריך</span><br><b>${esc(fmtDate(WF.date))}</b></div>
+      <div><span class="settings-sub">ממלא היומן</span><br><b>${esc(WF.crew[0]&&ex?ex.createdByName:USER)}</b></div>
+      <div><span class="settings-sub">מס' יומן</span><br><b>${WF.number!=null?wlNum(WF.number):'יינתן בשמירה'}</b></div>
+    </div>
+    <label>פרויקט / אתר *</label>
+    <select id="wf_site" onchange="wlPickSite(this.value)">${wlSiteOptions()}</select>
+    <div id="wf_casual">${wlCasualBlock()}</div>
+
+    <div class="wl-sec">תאור העבודה שבוצעה — שורה לכל עבודה, עם כמות</div>
+    <div id="wf_work">${wlWorkLines()}</div>
+    <button class="btn-tiny" onclick="wlAddWork()">＋ שורת עבודה</button>
+
+    <div class="wl-sec">עובדים ושעות</div>
+    <div id="wf_crew">${wlCrewLines()}</div>
+    <div class="task-actions" style="margin-top:6px">
+      <button class="btn-tiny" onclick="wlAddCrew()">＋ עובד</button>
+      <button class="btn-tiny" onclick="wlSameHours()">אותן שעות לכולם</button>
+      <span style="margin-inline-start:auto;font-weight:800">סה"כ <span id="wf_total">${wlTotal(WF)}</span> ש'</span>
+    </div>
+
+    <label>הערות / הוראות המזמין / המפקח</label>
+    <textarea id="wf_cnotes" rows="2">${esc(WF.clientNotes)}</textarea>
+    <label>הערות נציג החברה</label>
+    <textarea id="wf_onotes" rows="2">${esc(WF.companyNotes)}</textarea>
+
+    <label>חתימת המזמין / המפקח — שם החותם</label>
+    <input id="rp_signname" value="${esc(WF.signName||'')}" placeholder="שם מלא (לא חובה)">
+    <canvas id="rp_sign" width="640" height="240" style="width:100%;height:120px;border:1.5px dashed #C9962E;border-radius:10px;background:#fff;touch-action:none"></canvas>
+    <div class="task-actions" style="margin-top:6px"><button class="btn-tiny" onclick="clearSign()">✕ ניקוי חתימה</button></div>
+
+    <div class="form-actions">
+      <button class="btn-secondary" onclick="closeModal()">ביטול</button>
+      <button class="btn-primary" onclick="saveWlog()">שמירת היומן ✓</button>
+    </div>`);
+  initSignPad();
+}
+function wlSiteOptions(){
+  const fixed = (S.projects||[]).filter(p=>p.active).map(p=>`<option value="p:${esc(p.id)}"${WF.siteSel==='p:'+p.id?' selected':''}>${esc(p.name)}</option>`).join('');
+  const saved = (WLSITES||[]).map(s=>`<option value="s:${esc(s.id)}"${WF.siteSel==='s:'+s.id?' selected':''}>${esc(s.name)}${s.address?' — '+esc(s.address):''}</option>`).join('');
+  return `<option value="">— בחר —</option>
+    <optgroup label="פרויקטים">${fixed}</optgroup>
+    ${saved?`<optgroup label="אתרים מזדמנים שנשמרו">${saved}</optgroup>`:''}
+    <optgroup label="חדש"><option value="new"${String(WF.siteSel).startsWith('casual')?' selected':''}>＋ אתר / לקוח מזדמן חדש</option></optgroup>`;
+}
+function wlCasualBlock(){
+  const s = WF.site;
+  if (WF.site.kind !== 'casual') return '';
+  return `<div class="wl-casual">
+    <label>שם האתר / הלקוח *</label><input id="wf_sname" value="${esc(s.name)}" oninput="WF.site.name=this.value">
+    <div class="form-2col">
+      <div><label>כתובת</label><input id="wf_saddr" value="${esc(s.address)}" oninput="WF.site.address=this.value"></div>
+      <div><label>איש קשר</label><input id="wf_sclient" value="${esc(s.client)}" oninput="WF.site.client=this.value"></div>
+    </div>
+    <div class="form-2col">
+      <div><label>טלפון</label><input id="wf_sphone" type="tel" dir="ltr" value="${esc(s.phone)}" oninput="WF.site.phone=this.value"></div>
+      <div><label>פרטים (קומה, קוד, מס' הזמנה)</label><input id="wf_snotes" value="${esc(s.notes)}" oninput="WF.site.notes=this.value"></div>
+    </div>
+    <label style="font-weight:600"><input type="checkbox" ${WF.saveSite?'checked':''} onchange="WF.saveSite=this.checked"> לשמור ברשימה לשימוש חוזר</label>
+  </div>`;
+}
+function wlPickSite(v){
+  WF.siteSel = v;
+  if (v.startsWith('p:')){
+    const p = (S.projects||[]).find(x=>x.id===v.slice(2));
+    WF.projectId = p?p.id:''; WF.site = { kind:'fixed', name:p?p.name:'', address:'', client:p?p.client||'':'', phone:'', notes:'' };
+  } else if (v.startsWith('s:')){
+    const s = (WLSITES||[]).find(x=>x.id===v.slice(2));
+    WF.projectId = ''; WF.site = Object.assign({ kind:'casual', name:'', address:'', client:'', phone:'', notes:'' }, s||{}, { kind:'casual' });
+  } else if (v === 'new'){
+    WF.projectId = ''; WF.site = { kind:'casual', name:'', address:'', client:'', phone:'', notes:'' };
+  } else { WF.projectId=''; WF.site = { kind:'fixed', name:'', address:'', client:'', phone:'', notes:'' }; }
+  document.getElementById('wf_casual').innerHTML = wlCasualBlock();
+  const f = document.getElementById('wf_sname'); if (f) f.focus();
+}
+function wlWorkLines(){
+  return (WF.work||[]).map((w,i)=>`<div class="wl-line">
+    <span class="wl-i">${i+1}</span>
+    <input class="wl-desc" value="${esc(w.desc)}" placeholder="מה בוצע? למשל: התקנת מצלמה כולל חיבור" oninput="WF.work[${i}].desc=this.value">
+    <input class="wl-q" value="${esc(String(w.qty))}" inputmode="decimal" placeholder="כמות *" oninput="WF.work[${i}].qty=this.value">
+    <select class="wl-u" onchange="WF.work[${i}].unit=this.value">${WL_UNITS.map(u=>`<option${u===w.unit?' selected':''}>${u}</option>`).join('')}</select>
+    <button class="wl-x" onclick="wlDelWork(${i})" title="מחיקת שורה">✕</button>
+  </div>`).join('');
+}
+function wlCrewLines(){
+  const names = (S.team||[]).map(m=>m.name);
+  return (WF.crew||[]).map((c,i)=>`<div class="wl-line wl-crew">
+    <span class="wl-i">${i+1}</span>
+    <select class="wl-desc" onchange="WF.crew[${i}].name=this.value">
+      <option value="">— עובד —</option>
+      ${names.map(n=>`<option${n===c.name?' selected':''}>${esc(n)}</option>`).join('')}
+    </select>
+    <input class="wl-t" type="time" value="${esc(c.from)}" onchange="WF.crew[${i}].from=this.value;wlSum()">
+    <input class="wl-t" type="time" value="${esc(c.to)}" onchange="WF.crew[${i}].to=this.value;wlSum()">
+    <span class="wl-h" id="wf_h${i}">${wlHours(c.from,c.to)}</span>
+    <input class="wl-n" value="${esc(c.note||'')}" placeholder="הערה" oninput="WF.crew[${i}].note=this.value">
+    <button class="wl-x" onclick="wlDelCrew(${i})" title="הסרה">✕</button>
+  </div>`).join('');
+}
+function wlSum(){
+  (WF.crew||[]).forEach((c,i)=>{ const el=document.getElementById('wf_h'+i); if(el) el.textContent = wlHours(c.from,c.to); });
+  const t = document.getElementById('wf_total'); if (t) t.textContent = wlTotal(WF);
+}
+function wlAddWork(){ WF.work.push({desc:'',qty:'',unit:"יח'"}); document.getElementById('wf_work').innerHTML = wlWorkLines(); }
+function wlDelWork(i){ if (WF.work.length>1){ WF.work.splice(i,1); document.getElementById('wf_work').innerHTML = wlWorkLines(); } }
+function wlAddCrew(){ const last = WF.crew[WF.crew.length-1]||{}; WF.crew.push({name:'',from:last.from||'07:00',to:last.to||'',note:''});
+  document.getElementById('wf_crew').innerHTML = wlCrewLines(); wlSum(); }
+function wlDelCrew(i){ if (WF.crew.length>1){ WF.crew.splice(i,1); document.getElementById('wf_crew').innerHTML = wlCrewLines(); wlSum(); } }
+function wlSameHours(){ const a = WF.crew[0]; WF.crew.forEach(c=>{ c.from=a.from; c.to=a.to; });
+  document.getElementById('wf_crew').innerHTML = wlCrewLines(); wlSum(); }
+
+async function wlNextNumber(){
+  const ref = WL_META.doc('counter');
+  try {
+    return await Promise.race([
+      db.runTransaction(async tx => { const s = await tx.get(ref); const n = (s.exists ? s.data().last : WL_FIRST_NUMBER-1) + 1; tx.set(ref,{last:n}); return n; }),
+      new Promise(r => setTimeout(()=>r(null), 7000))
+    ]);
+  } catch(e){ return null; }
+}
+async function saveWlog(){
+  if (!guardEdit()) return;
+  WF.clientNotes = (document.getElementById('wf_cnotes')||{value:''}).value.trim();
+  WF.companyNotes = (document.getElementById('wf_onotes')||{value:''}).value.trim();
+  WF.signName = (document.getElementById('rp_signname')||{value:''}).value.trim();
+  if (WF.site.kind==='casual' && !WF.site.name.trim()){ toastMsg('חסר שם האתר / הלקוח'); return; }
+  if (WF.site.kind==='fixed' && !WF.projectId){ toastMsg('צריך לבחור פרויקט או אתר'); return; }
+  const work = WF.work.filter(w=>w.desc.trim());
+  if (!work.length){ toastMsg('חסרה לפחות שורת עבודה אחת'); return; }
+  const bad = work.find(w=>!(parseFloat(String(w.qty).replace(',','.'))>0));
+  if (bad){ toastMsg('חסרה כמות בשורה: ' + bad.desc.slice(0,28) + ' — אם אין כמות, לרשום 1 קומפ׳'); return; }
+  const crew = WF.crew.filter(c=>c.name).map(c=>({name:c.name, from:c.from, to:c.to, hours:wlHours(c.from,c.to), note:c.note||''}));
+  if (!crew.length){ toastMsg('צריך לפחות עובד אחד'); return; }
+  const noH = crew.find(c=>!c.hours);
+  if (noH){ toastMsg('חסרות שעות תקינות אצל ' + noH.name); return; }
+
+  toastMsg('שומר…');
+  const cv = document.getElementById('rp_sign');
+  let signId = WF.signId || '';
+  if (cv && cv.getContext && signDirty){
+    try { const sid = 'sg_' + uid(); await savePhotoDoc(sid, cv.toDataURL('image/png')); signId = sid; } catch(e){}
+  }
+  if (WF.site.kind==='casual' && WF.siteSel==='new' && WF.saveSite){
+    const sid = 'ws_' + uid();
+    const rec = { id:sid, name:WF.site.name, address:WF.site.address||'', client:WF.site.client||'', phone:WF.site.phone||'', notes:WF.site.notes||'' };
+    WL_SITES.doc(sid).set(rec).then(()=>{ WLSITES.push(rec); }).catch(()=>{});
+  }
+  if (WF.number == null) WF.number = await wlNextNumber();
+  const now = new Date().toISOString();
+  const log = {
+    id: WF.id, number: WF.number, date: WF.date,
+    createdBy: WF.createdBy || (authUser?authUser.uid:''), createdByName: WF.createdByName || USER,
+    createdAt: WF.createdAt || now, updatedAt: now, updatedByName: USER,
+    projectId: WF.projectId || '', site: WF.site,
+    work: work.map(w=>({desc:w.desc.trim(), qty:w.qty, unit:w.unit||"יח'"})),
+    crew: crew, totalHours: crew.reduce((s,c)=>s+c.hours,0),
+    clientNotes: WF.clientNotes, companyNotes: WF.companyNotes,
+    signId: signId, signName: WF.signName
+  };
+  const p = WL_COL.doc(log.id).set(log);
+  const confirmed = await Promise.race([p.then(()=>true), new Promise(r=>setTimeout(()=>r(false),5000))]);
+  p.catch(e => { toastMsg(e && e.code==='permission-denied' ? '❌ אין הרשאה — יש לפרסם את חוקי Firestore של היומן' : 'שגיאה בשמירה'); });
+  if (!WLOGS.some(x=>x.id===log.id)) WLOGS.unshift(log); else WLOGS = WLOGS.map(x=>x.id===log.id?log:x);
+  WF = null; closeModal(); render();
+  toastMsg(confirmed ? 'יומן ' + wlNum(log.number) + ' נשמר ✓' : 'נשמר במכשיר — יסתנכרן כשתהיה קליטה');
+}
+async function deleteWlog(id){
+  if (!wlAdmin()){ toastMsg('מחיקה למנהלים בלבד'); return; }
+  if (!confirm('למחוק את היומן? אי אפשר לשחזר.')) return;
+  const l = WLOGS.find(x=>x.id===id);
+  if (l && l.signId) deletePhotoDocs([l.signId]);
+  await WL_COL.doc(id).delete().catch(()=>toastMsg('המחיקה נכשלה'));
+  WLOGS = WLOGS.filter(x=>x.id!==id);
+  closeModal(); render(); toastMsg('היומן נמחק');
+}
+
+/* ---------- אקסל מפורט לחיוב ---------- */
+function withExcelJS(cb){
+  if (window.ExcelJS){ cb(); return; }
+  toastMsg('טוען מודול אקסל…');
+  const s = document.createElement('script');
+  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js';
+  s.onload = cb; s.onerror = () => toastMsg('לא ניתן לטעון את מודול האקסל — בדקו חיבור');
+  document.body.appendChild(s);
+}
+function wlogReportCard(){
+  if (!wlAdmin()) return '';
+  if (!wlFrom){ wlFrom = today().slice(0,8) + '01'; wlTo = today(); }
+  const inR = d => d && d >= wlFrom && d <= wlTo;
+  const logs = WLOGS.filter(l=>inR(l.date));
+  const lines = logs.reduce((s,l)=>s+(l.work||[]).length,0);
+  const tk = (S.tasks||[]).filter(t=>(t.status==='בוצע'||t.status==='אושר') && inR(t.closedAt||t.updatedAt)).length;
+  const cl = (S.calls||[]).filter(c=>c.status==='נסגרה' && inR(c.closedAt||c.updatedAt)).length;
+  return `
+    <div class="card">
+      <div class="card-title">📝 אקסל מפורט לחיוב — יומנים, משימות וקריאות</div>
+      <div class="settings-sub">שורה לכל עבודה שבוצעה, עם הכמות, ועמודת מחיר יחידה לתמחור. כולל ריכוז כמויות לפרויקט, שעות עובדים, וגיליון לכל יומן במבנה הטופס.</div>
+      <div class="form-2col" style="margin-top:8px">
+        <div><label style="display:block;font-size:12px;font-weight:700;color:#555B69;margin-bottom:4px">מתאריך</label><input type="date" value="${esc(wlFrom)}" onchange="wlFrom=this.value;render()"></div>
+        <div><label style="display:block;font-size:12px;font-weight:700;color:#555B69;margin-bottom:4px">עד תאריך</label><input type="date" value="${esc(wlTo)}" onchange="wlTo=this.value;render()"></div>
+      </div>
+      <div class="task-actions" style="margin-top:8px">
+        <button class="btn-tiny" onclick="wlRange(-1)">אתמול</button>
+        <button class="btn-tiny" onclick="wlRange(0)">היום</button>
+        <button class="btn-tiny" onclick="wlRange(-6)">7 ימים</button>
+        <button class="btn-tiny" onclick="wlRangeMonth()">מתחילת החודש</button>
+      </div>
+      <div class="settings-sub" style="margin-top:8px">בתקופה: ${logs.length} יומנים (${lines} שורות עבודה) · ${tk} משימות שהושלמו · ${cl} קריאות שנסגרו</div>
+      <div class="form-actions">
+        <button class="btn-primary" onclick="exportWlogXlsx()">📊 הורדת האקסל</button>
+      </div>
+    </div>`;
+}
+function wlRange(off){ const d = new Date(); d.setDate(d.getDate()+off);
+  const s = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  if (off<0 && off!==-1){ wlFrom=s; wlTo=today(); } else { wlFrom=s; wlTo=s; } render(); }
+function wlRangeMonth(){ wlFrom = today().slice(0,8)+'01'; wlTo = today(); render(); }
+
+function exportWlogXlsx(){
+  if (!wlAdmin()){ toastMsg('למנהלים בלבד'); return; }
+  const inR = d => d && d >= wlFrom && d <= wlTo;
+  const logs = WLOGS.filter(l=>inR(l.date)).sort((a,b)=>a.date.localeCompare(b.date)||((a.number||1e9)-(b.number||1e9)));
+  const tasks = (S.tasks||[]).filter(t=>(t.status==='בוצע'||t.status==='אושר') && inR(t.closedAt||t.updatedAt));
+  const calls = (S.calls||[]).filter(c=>c.status==='נסגרה' && inR(c.closedAt||c.updatedAt));
+  if (!logs.length && !tasks.length && !calls.length){ toastMsg('אין נתונים בתקופה'); return; }
+  withExcelJS(async () => {
+    try {
+      for (const l of logs) if (l.signId) await loadMediaDoc(l.signId);
+      const wb = buildWlogWorkbook(logs, tasks, calls);
+      const buf = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buf], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'VAS-לחיוב-' + wlFrom + (wlFrom===wlTo?'':'_'+wlTo) + '.xlsx';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+      toastMsg('קובץ האקסל ירד ✓');
+    } catch(e){ console.error(e); toastMsg('שגיאה ביצירת האקסל'); }
+  });
+}
+function buildWlogWorkbook(logs, tasks, calls){
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'VAS Security';
+  const thin = {style:'thin', color:{argb:'FF1B1F2A'}};
+  const border = {top:thin,bottom:thin,left:thin,right:thin};
+  const headFill = {type:'pattern',pattern:'solid',fgColor:{argb:'FF1B3A6B'}};
+  const capFill = {type:'pattern',pattern:'solid',fgColor:{argb:'FFE6ECFB'}};
+  const priceFill = {type:'pattern',pattern:'solid',fgColor:{argb:'FFFBF3C4'}};
+  const money = '#,##0.00;-#,##0.00;;@';
+  const sheet = (name, cols, rows) => {
+    const ws = wb.addWorksheet(name, {views:[{rightToLeft:true,state:'frozen',ySplit:1}],
+      pageSetup:{orientation:'landscape',fitToPage:true,fitToWidth:1,fitToHeight:0,paperSize:9}});
+    ws.columns = cols.map(c=>({header:c[0], key:c[0], width:c[1]}));
+    rows.forEach(r=>ws.addRow(r));
+    ws.getRow(1).height = 24;
+    ws.getRow(1).eachCell(c=>{ c.font={bold:true,color:{argb:'FFFFFFFF'}}; c.fill=headFill;
+      c.alignment={horizontal:'center',vertical:'middle',wrapText:true}; c.border=border; });
+    for (let i=2;i<=ws.rowCount;i++) ws.getRow(i).eachCell({includeEmpty:true}, c=>{
+      c.border=border; c.alignment={vertical:'top',wrapText:true,horizontal:'right',readingOrder:'rtl'}; });
+    if (rows.length) ws.autoFilter = {from:{row:1,column:1}, to:{row:rows.length+1,column:cols.length}};
+    return ws;
+  };
+  const d = fmtDate;
+  const person = x => x.closedBy || x.updatedBy || x.createdBy || '';
+
+  /* 1 — שורה לכל עבודה */
+  const items = [];
+  logs.forEach(l => (l.work||[]).forEach((w,i) => items.push({
+    src:'יומן עבודה', ref:wlNum(l.number), date:l.date, site:wlSiteName(l),
+    client:[l.site&&l.site.client, l.site&&l.site.phone].filter(Boolean).join(' · '),
+    line:i+1, desc:w.desc, qty:wlQty(w.qty), unit:w.unit,
+    by:(l.crew||[]).map(c=>c.name).join(', '), sign:l.signId?'חתום':''
+  })));
+  tasks.forEach(t => items.push({
+    src:'משימה', ref:'', date:t.closedAt||t.updatedAt, site:projName(t.projectId),
+    client:t.location||'', line:1,
+    desc:(t.doneDesc||t.report||t.title) + (t.location?' ('+t.location+')':''),
+    qty:wlQty(t.doneQty||t.qty), unit:'', by:person(t), sign:t.signId?'חתום':''
+  }));
+  calls.forEach(c => items.push({
+    src:'קריאת שירות', ref:'', date:c.closedAt||c.updatedAt, site:c.customer,
+    client:c.phone||'', line:1,
+    desc:(c.doneDesc||c.report||c.desc), qty:wlQty(c.doneQty||c.qty), unit:'', by:person(c), sign:c.signId?'חתום':''
+  }));
+  items.sort((a,b)=>(a.date||'').localeCompare(b.date||'') || a.site.localeCompare(b.site,'he'));
+  const bill = sheet('פירוט לחיוב',
+    [['מקור',13],["מס' יומן",10],['תאריך',12],['פרויקט / אתר',26],['לקוח / איש קשר',20],['שורה',7],
+     ['תיאור העבודה שבוצעה',52],['כמות',10],['יחידה',9],['מחיר יחידה ₪',13],['סה"כ ₪',14],['בוצע ע"י',22],['חתימה',9]],
+    items.map(x=>[x.src,x.ref,d(x.date),x.site,x.client,x.line,x.desc,x.qty,x.unit,'','',x.by,x.sign]));
+  items.forEach((_,k)=>{ const r=k+2;
+    bill.getCell('K'+r).value = {formula:`IF(J${r}="","",H${r}*J${r})`};
+    bill.getCell('J'+r).numFmt = money; bill.getCell('K'+r).numFmt = money;
+    bill.getCell('J'+r).fill = priceFill; });
+  if (items.length){ const r = items.length+3, row = bill.getRow(r);
+    row.getCell(7).value = 'סה"כ לפני מע"מ (לפי הסינון)';
+    row.getCell(11).value = {formula:`SUBTOTAL(109,K2:K${r-2})`};
+    row.getCell(11).numFmt = money;
+    row.eachCell(c=>{ c.font={bold:true}; c.border=border; c.alignment={horizontal:'right',readingOrder:'rtl'}; }); }
+
+  /* 2 — ריכוז כמויות */
+  const agg = new Map();
+  items.forEach(x => { const key = [x.site, x.desc.trim().replace(/\s+/g,' '), x.unit].join('|');
+    const a = agg.get(key) || {site:x.site, client:x.client, desc:x.desc.trim(), unit:x.unit, qty:0, refs:new Set(), dates:new Set()};
+    if (typeof x.qty === 'number') a.qty += x.qty;
+    if (x.ref) a.refs.add(x.ref); a.dates.add(d(x.date)); agg.set(key,a); });
+  const rows2 = [...agg.values()].sort((a,b)=>a.site.localeCompare(b.site,'he')||a.desc.localeCompare(b.desc,'he'));
+  const sum = sheet('ריכוז כמויות לפרויקט',
+    [['פרויקט / אתר',26],['לקוח / איש קשר',20],['תיאור העבודה',52],['כמות מצטברת',13],['יחידה',9],
+     ['מחיר יחידה ₪',13],['סה"כ ₪',14],["מס' יומנים",16],['תאריכים',26]],
+    rows2.map(a=>[a.site,a.client,a.desc,a.qty||'',a.unit,'','',[...a.refs].join(', '),[...a.dates].join(', ')]));
+  rows2.forEach((_,k)=>{ const r=k+2;
+    sum.getCell('G'+r).value = {formula:`IF(F${r}="","",D${r}*F${r})`};
+    sum.getCell('F'+r).numFmt = money; sum.getCell('G'+r).numFmt = money;
+    sum.getCell('F'+r).fill = priceFill; });
+  if (rows2.length){ const r = rows2.length+3, row = sum.getRow(r);
+    row.getCell(3).value = 'סה"כ לפני מע"מ (לפי הסינון)';
+    row.getCell(7).value = {formula:`SUBTOTAL(109,G2:G${r-2})`};
+    row.getCell(7).numFmt = money;
+    row.eachCell(c=>{ c.font={bold:true}; c.border=border; c.alignment={horizontal:'right',readingOrder:'rtl'}; }); }
+
+  /* 3 — שעות עובדים */
+  sheet('שעות עובדים',
+    [["מס' יומן",10],['תאריך',12],['פרויקט / אתר',26],['שם העובד',16],['משעה',9],['עד שעה',9],['סה"כ שעות',11],['הערות',28]],
+    logs.flatMap(l=>(l.crew||[]).map(c=>[wlNum(l.number),d(l.date),wlSiteName(l),c.name,c.from,c.to,c.hours,c.note||''])));
+
+  /* 4 — רשימת יומנים */
+  sheet('רשימת יומנים',
+    [["מס' יומן",10],['תאריך',12],['פרויקט / אתר',26],['סוג',10],['כתובת',24],['לקוח',18],['טלפון',14],['מילא היומן',14],
+     ['עובדים',26],['שורות עבודה',11],['סה"כ שעות',11],['הערות המזמין',30],['הערות נציג החברה',30],['חתימה',9]],
+    logs.map(l=>[wlNum(l.number),d(l.date),wlSiteName(l), l.site&&l.site.kind==='casual'?'מזדמן':'פרויקט',
+      (l.site&&l.site.address)||'',(l.site&&l.site.client)||'',(l.site&&l.site.phone)||'',l.createdByName||'',
+      (l.crew||[]).map(c=>c.name).join(', '),(l.work||[]).length,l.totalHours||0,l.clientNotes||'',l.companyNotes||'',l.signId?'חתום':'']));
+
+  /* 5 — גיליון לכל יומן, במבנה הטופס */
+  const used = new Set();
+  logs.slice(0,120).forEach(l => {
+    let nm = 'יומן ' + wlNum(l.number); while (used.has(nm)) nm += '_'; used.add(nm);
+    const ws = wb.addWorksheet(nm, {views:[{rightToLeft:true,showGridLines:false}],
+      pageSetup:{orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:0,paperSize:9}});
+    ws.columns = [{width:7},{width:22},{width:12},{width:12},{width:12},{width:28}];
+    const R = (vals,opt)=>{ opt = opt||{}; const r = ws.addRow(vals);
+      r.eachCell({includeEmpty:true}, c=>{ c.border=border;
+        c.alignment={vertical:'middle',horizontal:opt.center?'center':'right',wrapText:true,readingOrder:'rtl'};
+        if (opt.bold) c.font={bold:true}; if (opt.fill) c.fill=opt.fill; });
+      if (opt.h) r.height = opt.h; return r; };
+    const M = (r,a,b)=>ws.mergeCells(r.number,a,r.number,b);
+    let r = R(['ש.ו טכנולוגיות ביטחון בע"מ · VAS Security'],{bold:true}); M(r,1,6);
+    r = R(["יומן עבודה מס' " + wlNum(l.number)],{bold:true,center:true,h:30}); M(r,1,6);
+    r.getCell(1).font = {bold:true,size:18};
+    r = R(['תאריך', d(l.date), '', 'פרויקט / אתר', wlSiteName(l), '']); M(r,2,3); M(r,5,6);
+    r.getCell(1).font={bold:true}; r.getCell(4).font={bold:true};
+    if ([l.site&&l.site.address,l.site&&l.site.client,l.site&&l.site.phone].some(Boolean)){
+      r = R(['כתובת',(l.site.address||''),'','לקוח',[l.site.client,l.site.phone].filter(Boolean).join(' · '),'']);
+      M(r,2,3); M(r,5,6); r.getCell(1).font={bold:true}; r.getCell(4).font={bold:true};
+    }
+    if (l.site && l.site.notes){ r = R(['פרטים', l.site.notes]); M(r,2,6); r.getCell(1).font={bold:true}; }
+    r = R(['תאור העבודה שבוצעה'],{bold:true,center:true,fill:capFill}); M(r,1,6);
+    r = R(["מס'",'תיאור','','','כמות','יחידה'],{bold:true,center:true,fill:capFill}); M(r,2,4);
+    (l.work||[]).forEach((w,i)=>{ r = R([i+1,w.desc,'','',wlQty(w.qty),w.unit]); M(r,2,4);
+      r.height = Math.max(18, Math.ceil((w.desc||'').length/38)*16); });
+    r = R(['עובדים ושעות'],{bold:true,center:true,fill:capFill}); M(r,1,6);
+    R(["מס'",'שם העובד','משעה','עד שעה','סה"כ שעות','הערות'],{bold:true,center:true,fill:capFill});
+    (l.crew||[]).forEach((c,i)=>R([i+1,c.name,c.from,c.to,c.hours,c.note||'']));
+    r = R(['סה"כ','','','',l.totalHours||0,''],{bold:true}); M(r,1,4);
+    r = R(['הערות / הוראות המזמין / המפקח','','','הערות נציג החברה','',''],{bold:true,center:true,fill:capFill});
+    M(r,1,3); M(r,4,6);
+    r = R([l.clientNotes||'','','',l.companyNotes||'','',''],{h:70}); M(r,1,3); M(r,4,6);
+    r.eachCell(c=>c.alignment={vertical:'top',horizontal:'right',wrapText:true,readingOrder:'rtl'});
+    r = R(['שם החותם: ' + (l.signName||''),'','','מילא היומן: ' + (l.createdByName||''),'','']); M(r,1,3); M(r,4,6);
+    r = R(['','','','','',''],{h:64}); M(r,1,3); M(r,4,6);
+    const img = l.signId ? photoCache[l.signId] : null;
+    if (img && String(img).startsWith('data:image')){
+      try { const iid = wb.addImage({base64:String(img).split(',')[1], extension:'png'});
+        ws.addImage(iid, {tl:{col:0.2,row:r.number-1+0.1}, ext:{width:190,height:57}}); } catch(e){}
+    }
+    r = R(['חתימת המזמין / המפקח','','','חתימת נציג החברה','',''],{center:true}); M(r,1,3); M(r,4,6);
+  });
+  return wb;
+}
+
 </script>
 </body>
 </html>
