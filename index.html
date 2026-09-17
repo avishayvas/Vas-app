@@ -1073,6 +1073,7 @@ function openTaskForm(id){
   if (!guardEdit()) return;
   const t = id ? S.tasks.find(x=>x.id===id) : null;
   pendingPhotos = t ? taskMedia(t).map(m=>({ id: m.id, kind: m.kind })) : [];
+  window.MEDIA_MAX = 4;
   const f = t || { projectId:(S.projects.find(p=>p.active)||{}).id||'', title:'', location:'', discipline:'כללי', assignee:'', urgency:'רגיל', status:'פתוח', due:'', notes:'' };
   modalShell(t?'עריכת משימה':'משימה חדשה', `
     <label>פרויקט</label>
@@ -1251,6 +1252,7 @@ function openCallForm(id){
   const c = id ? S.calls.find(x=>x.id===id) : null;
   const f = c || { customer:'', desc:'', phone:'', technician:'', urgency:'רגיל', status:'חדשה', notes:'' };
   pendingPhotos = c ? (c.media||[]).map(m=>({ id: m.id, kind: m.kind })) : [];
+  window.MEDIA_MAX = 4;
   const known = !f.customer || siteList().includes(f.customer);
   modalShell(c?'עריכת קריאה':'קריאת שירות חדשה', `
     <label>לקוח / אתר *</label>
@@ -2490,7 +2492,8 @@ function attachMediaInput(){
   el.onchange = async e => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
-    if (pendingPhotos.length >= 4){ toastMsg('עד 4 קבצים לפריט'); e.target.value=''; return; }
+    const lim = window.MEDIA_MAX || 4;
+    if (pendingPhotos.length >= lim){ toastMsg('עד ' + lim + ' קבצים'); e.target.value=''; return; }
     try {
       if (file.type.startsWith('video')){
         if (file.size > 8*1024*1024){ toastMsg('סרטון עד 8MB — צלמו סרטון קצר יותר'); e.target.value=''; return; }
@@ -2683,7 +2686,7 @@ function wlogCard(l){
     <span class="wl-num">${wlNum(l.number)}</span>
     <div style="flex:1">
       <div class="mini-task-title">${esc(wlSiteName(l))}${l.site&&l.site.kind==='casual'?' <span style="font-weight:400;color:#8A8F9C">· מזדמן</span>':''}</div>
-      <div class="mini-task-sub">${esc(fmtDate(l.date))} · ${esc(l.createdByName||'')} · ${lines} שורות עבודה · ${wlTotal(l)} ש'${l.signId?' · ✍️ חתום':''}</div>
+      <div class="mini-task-sub">${esc(fmtDate(l.date))} · ${esc(l.createdByName||'')} · ${lines} שורות עבודה · ${wlTotal(l)} ש'${(l.media&&l.media.length)?' · 📷 '+l.media.length:''}${l.signId?' · ✍️ חתום':''}</div>
     </div>
   </div>`;
 }
@@ -2705,6 +2708,7 @@ function openWlogView(id){
       <div class="wl-row" style="font-weight:800"><span>סה"כ שעות</span><b>${wlTotal(l)}</b></div>
       ${l.clientNotes?`<div class="wl-sec">הערות המזמין / המפקח</div><div>${esc(l.clientNotes)}</div>`:''}
       ${l.companyNotes?`<div class="wl-sec">הערות נציג החברה</div><div>${esc(l.companyNotes)}</div>`:''}
+      ${(l.media&&l.media.length)?`<div class="wl-sec">📷 תיעוד מהשטח (${l.media.length})</div>${mediaStrip(l.media)}`:''}
       ${l.signId?`<div class="wl-sec">חתימת המזמין${l.signName?' — '+esc(l.signName):''}</div><img class="wl-sign" data-photoid="${esc(l.signId)}" alt="חתימה">`:''}
     </div>
     <div class="form-actions" style="flex-wrap:wrap">
@@ -2726,8 +2730,10 @@ function openWlogForm(id){
     site: { kind:'fixed', name:'', address:'', client:'', phone:'', notes:'' },
     work: [{desc:'',qty:'',unit:"יח'"},{desc:'',qty:'',unit:"יח'"}],
     crew: [{name:USER, from:'07:00', to:'', note:''}],
-    clientNotes:'', companyNotes:'', signName:'', saveSite:true
+    clientNotes:'', companyNotes:'', signName:'', saveSite:true, media:[]
   };
+  pendingPhotos = (WF.media||[]).map(m=>({ id:m.id, kind:m.kind }));
+  window.MEDIA_MAX = 6;
   if (ex) WF.siteSel = ex.site && ex.site.kind==='casual' ? 'casual:'+(ex.site.name||'') : 'p:'+ex.projectId;
   modalShell(ex ? "עריכת יומן " + wlNum(ex.number) : 'יומן עבודה חדש', `
     <div class="wl-head">
@@ -2751,6 +2757,11 @@ function openWlogForm(id){
       <span style="margin-inline-start:auto;font-weight:800">סה"כ <span id="wf_total">${wlTotal(WF)}</span> ש'</span>
     </div>
 
+    <label>📷 תמונות / סרטונים מהשטח (עד 6)</label>
+    <div class="settings-sub" style="margin:-2px 0 6px">לחיצה על המצלמה פותחת צילום ישר מהטלפון, או בחירה מהגלריה.</div>
+    <div class="photo-row" id="tf_photos"></div>
+    <input id="tf_file" type="file" accept="image/*,video/*" capture="environment" style="display:none">
+
     <label>הערות / הוראות המזמין / המפקח</label>
     <textarea id="wf_cnotes" rows="2">${esc(WF.clientNotes)}</textarea>
     <label>הערות נציג החברה</label>
@@ -2765,6 +2776,8 @@ function openWlogForm(id){
       <button class="btn-secondary" onclick="closeModal()">ביטול</button>
       <button class="btn-primary" onclick="saveWlog()">שמירת היומן ✓</button>
     </div>`);
+  renderFormPhotos();
+  attachMediaInput();
   initSignPad();
 }
 function wlSiteOptions(){
@@ -2867,6 +2880,14 @@ async function saveWlog(){
   if (noH){ toastMsg('חסרות שעות תקינות אצל ' + noH.name); return; }
 
   toastMsg('שומר…');
+  const oldIds = (WF.media||[]).map(m=>m.id);
+  const media = [];
+  for (const ph of pendingPhotos){
+    if (ph.id) media.push({ id: ph.id, kind: ph.kind || 'image' });
+    else { const pid = 'ph_' + uid(); await saveMediaDoc(pid, ph.data); media.push({ id: pid, kind: ph.kind || 'image' }); }
+  }
+  const removed = oldIds.filter(x => !media.some(m => m.id === x));
+  if (removed.length) deleteMediaDocs(removed);
   const cv = document.getElementById('rp_sign');
   let signId = WF.signId || '';
   if (cv && cv.getContext && signDirty){
@@ -2887,20 +2908,21 @@ async function saveWlog(){
     work: work.map(w=>({desc:w.desc.trim(), qty:w.qty, unit:w.unit||"יח'"})),
     crew: crew, totalHours: crew.reduce((s,c)=>s+c.hours,0),
     clientNotes: WF.clientNotes, companyNotes: WF.companyNotes,
-    signId: signId, signName: WF.signName
+    signId: signId, signName: WF.signName, media: media
   };
   const p = WL_COL.doc(log.id).set(log);
   const confirmed = await Promise.race([p.then(()=>true), new Promise(r=>setTimeout(()=>r(false),5000))]);
   p.catch(e => { toastMsg(e && e.code==='permission-denied' ? '❌ אין הרשאה — יש לפרסם את חוקי Firestore של היומן' : 'שגיאה בשמירה'); });
   if (!WLOGS.some(x=>x.id===log.id)) WLOGS.unshift(log); else WLOGS = WLOGS.map(x=>x.id===log.id?log:x);
-  WF = null; closeModal(); render();
+  WF = null; pendingPhotos = []; closeModal(); render();
   toastMsg(confirmed ? 'יומן ' + wlNum(log.number) + ' נשמר ✓' : 'נשמר במכשיר — יסתנכרן כשתהיה קליטה');
 }
 async function deleteWlog(id){
   if (!wlAdmin()){ toastMsg('מחיקה למנהלים בלבד'); return; }
   if (!confirm('למחוק את היומן? אי אפשר לשחזר.')) return;
   const l = WLOGS.find(x=>x.id===id);
-  if (l && l.signId) deletePhotoDocs([l.signId]);
+  const ids = [...(l&&l.media?l.media.map(m=>m.id):[]), ...(l&&l.signId?[l.signId]:[])];
+  if (ids.length) deletePhotoDocs(ids);
   await WL_COL.doc(id).delete().catch(()=>toastMsg('המחיקה נכשלה'));
   WLOGS = WLOGS.filter(x=>x.id!==id);
   closeModal(); render(); toastMsg('היומן נמחק');
@@ -3058,10 +3080,10 @@ function buildWlogWorkbook(logs, tasks, calls){
   /* 4 — רשימת יומנים */
   sheet('רשימת יומנים',
     [["מס' יומן",10],['תאריך',12],['פרויקט / אתר',26],['סוג',10],['כתובת',24],['לקוח',18],['טלפון',14],['מילא היומן',14],
-     ['עובדים',26],['שורות עבודה',11],['סה"כ שעות',11],['הערות המזמין',30],['הערות נציג החברה',30],['חתימה',9]],
+     ['עובדים',26],['שורות עבודה',11],['סה"כ שעות',11],['תמונות',9],['הערות המזמין',30],['הערות נציג החברה',30],['חתימה',9]],
     logs.map(l=>[wlNum(l.number),d(l.date),wlSiteName(l), l.site&&l.site.kind==='casual'?'מזדמן':'פרויקט',
       (l.site&&l.site.address)||'',(l.site&&l.site.client)||'',(l.site&&l.site.phone)||'',l.createdByName||'',
-      (l.crew||[]).map(c=>c.name).join(', '),(l.work||[]).length,l.totalHours||0,l.clientNotes||'',l.companyNotes||'',l.signId?'חתום':'']));
+      (l.crew||[]).map(c=>c.name).join(', '),(l.work||[]).length,l.totalHours||0,(l.media||[]).length,l.clientNotes||'',l.companyNotes||'',l.signId?'חתום':'']));
 
   /* 5 — גיליון לכל יומן, במבנה הטופס */
   const used = new Set();
@@ -3116,6 +3138,15 @@ async function printWlog(id){
   toastMsg('מכין מסמך…');
   let signImg = '';
   if (l.signId){ const d = await loadPhotoDoc(l.signId); if (d) signImg = d; }
+  const shots = [];
+  for (const m of (l.media||[])){
+    if (m.kind === 'video') continue;
+    const d = await loadPhotoDoc(m.id); if (d) shots.push(d);
+  }
+  const photosHtml = shots.length
+    ? `<div class="cap" style="margin-top:12px">תיעוד מהשטח</div>
+       <div class="shots">${shots.map(src=>`<img src="${src}" alt="תיעוד מהשטח">`).join('')}</div>`
+    : '';
   const w = window.open('', '_blank');
   if (!w){ toastMsg('הדפדפן חסם חלון — אשרו חלונות קופצים'); return; }
   const siteExtra = [l.site&&l.site.address, l.site&&l.site.client, l.site&&l.site.phone, l.site&&l.site.notes].filter(Boolean).join(' · ');
@@ -3142,6 +3173,8 @@ async function printWlog(id){
       .sigs .t{background:#E6ECFB;border-bottom:1px solid #1B1F2A;padding:5px;font-weight:800;font-size:13px}
       .sigs .b{height:104px;display:flex;align-items:center;justify-content:center}
       .sigs img{max-width:94%;max-height:96px}
+      .shots{display:flex;flex-wrap:wrap;gap:8px;border:1px solid #1B1F2A;border-top:0;padding:8px}
+      .shots img{width:calc(33.333% - 6px);border:1px solid #DDD;border-radius:4px;object-fit:cover;aspect-ratio:4/3}
       .np{margin:20px 0;text-align:center}
       .np button{background:#1B1F2A;color:#fff;border:0;border-radius:10px;padding:12px 26px;font-family:inherit;font-weight:800;font-size:15px;cursor:pointer}
       .ft{margin-top:22px;text-align:center;font-size:11px;color:#888;border-top:1px solid #EEE;padding-top:10px}
@@ -3177,6 +3210,7 @@ async function printWlog(id){
       <div><div class="t">חתימת המזמין / המפקח${l.signName?' — '+esc(l.signName):''}</div><div class="b">${signImg?`<img src="${signImg}" alt="חתימה">`:''}</div></div>
       <div><div class="t">נציג החברה — ${esc(l.createdByName||'')}</div><div class="b"></div></div>
     </div>
+    ${photosHtml}
     <div class="np"><button onclick="window.print()">🖨️ הדפסה / שמירה כ-PDF</button></div>
     <div class="ft">VAS Security Technology LTD · הופק ${fmtDate(today())} ${nowTime()}</div>
     </body></html>`);
