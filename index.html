@@ -157,6 +157,12 @@ main { padding: 14px 14px 150px; max-width: 760px; margin: 0 auto; }  /* מרו�
 .btn-tiny.danger{background:#FBEAEA;color:#D64545}
 .btn-tiny[disabled],.btn-mini[disabled]{opacity:.45;cursor:default}
 .task-actions,.form-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+/* פס פעולות: כותרת/סטטוס בשורה נפרדת, וכפתורים ברשת שווה */
+.act-bar{margin-top:8px;padding-top:8px;border-top:1px dashed #EDE9DE}
+.act-bar:first-child{border-top:0;padding-top:0}
+.act-label{font-size:13px;font-weight:800;margin-bottom:7px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.act-btns{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
+.act-btns>.btn-tiny,.act-btns>.btn-mini{width:100%}
 .task-actions{margin-top:8px}
 .form-actions>.btn-primary,.form-actions>.btn-secondary,.form-actions>.btn-danger{flex:1 1 140px}
 .mini-task .btn-mini,.mini-task .btn-tiny{align-self:center}
@@ -1042,7 +1048,7 @@ function taskCard(t){
       ${claimBlock('task', t)}
       ${nudgeBlock('task', t)}
       ${presenceBlock('task', t)}
-      ${t.signId?`<div class="task-actions"><button class="btn-tiny" style="background:#EFF7F0;color:#2C6E48" onclick="openPhoto('${t.signId}')">✍️ חתימת לקוח${t.signName?`: ${esc(t.signName)}`:''}</button></div>`:(!READONLY&&USER?`<div class="task-actions"><button class="btn-tiny" onclick="openSignModal('task','${t.id}')">✍️ החתמת לקוח</button></div>`:'')}
+      ${t.signId?`<div class="act-bar"><div class="act-btns"><button class="btn-tiny" style="background:#EFF7F0;color:#2C6E48" onclick="event.stopPropagation();openPhoto('${t.signId}')">✍️ חתימת לקוח${t.signName?`: ${esc(t.signName)}`:''}</button></div></div>`:(!READONLY&&USER?`<div class="act-bar"><div class="act-btns"><button class="btn-tiny" onclick="event.stopPropagation();openSignModal('task','${t.id}')">✍️ החתמת לקוח</button></div></div>`:'')}
       ${billingBlock('task', t)}
     </div>`;
 }
@@ -1221,7 +1227,7 @@ function renderCalls(){
         ${claimBlock('call', c)}
         ${nudgeBlock('call', c)}
         ${presenceBlock('call', c)}
-        ${c.signId?`<div class="task-actions"><button class="btn-tiny" style="background:#EFF7F0;color:#2C6E48" onclick="openPhoto('${c.signId}')">✍️ חתימת לקוח${c.signName?`: ${esc(c.signName)}`:''}</button></div>`:(!READONLY&&USER?`<div class="task-actions"><button class="btn-tiny" onclick="openSignModal('call','${c.id}')">✍️ החתמת לקוח</button></div>`:'')}
+        ${c.signId?`<div class="act-bar"><div class="act-btns"><button class="btn-tiny" style="background:#EFF7F0;color:#2C6E48" onclick="event.stopPropagation();openPhoto('${c.signId}')">✍️ חתימת לקוח${c.signName?`: ${esc(c.signName)}`:''}</button></div></div>`:(!READONLY&&USER?`<div class="act-bar"><div class="act-btns"><button class="btn-tiny" onclick="event.stopPropagation();openSignModal('call','${c.id}')">✍️ החתמת לקוח</button></div></div>`:'')}
         ${billingBlock('call', c)}
       </div>`).join('')}
     ${READONLY?'':'<button class="fab" onclick="openCallForm()">＋ קריאה חדשה</button>'}`;
@@ -1943,7 +1949,7 @@ function presenceBlock(kind, x){
   if (!READONLY && USER && !final){
     const last = (x.presence||[]).slice().reverse().find(p=>p.by===USER);
     const isIn = last && last.type==='in';
-    h += `<div class="task-actions"><button class="btn-tiny" style="${isIn?'background:#5B3E8E;color:#fff':''}" onclick="markPresence('${kind}','${x.id}')">${isIn?'🏁 סיום עבודה באתר':'📍 הגעתי לאתר'}</button></div>`;
+    h += `<div class="act-bar"><div class="act-btns"><button class="btn-tiny" style="${isIn?'background:#5B3E8E;color:#fff':''}" onclick="event.stopPropagation();markPresence('${kind}','${x.id}')">${isIn?'🏁 סיום עבודה באתר':'📍 הגעתי לאתר'}</button></div></div>`;
   }
   return h;
 }
@@ -2165,10 +2171,10 @@ function clientUpdateBlock(c){
   if (!c.phone || READONLY || !USER) return '';
   let h = '';
   if (c.clientUpdated){
-    h += `<div class="task-actions" style="color:#3E8E5A;font-weight:700;font-size:12.5px">✅ הלקוח עודכן · ${esc(c.clientUpdated.t)} (${esc(c.clientUpdated.by)})</div>`;
+    h += `<div class="act-label" style="color:#3E8E5A;margin-top:8px">✅ הלקוח עודכן · ${esc(c.clientUpdated.t)} (${esc(c.clientUpdated.by)})</div>`;
   }
   const label = c.status === 'נסגרה' ? '📱 עדכון סיום ללקוח' : c.clientUpdated ? '📱 עדכון נוסף ללקוח' : '📱 אישור קבלה ללקוח בוואטסאפ';
-  h += `<div class="task-actions"><button class="btn-tiny" style="background:${c.clientUpdated?'#EFEDE6':'#3E8E5A'};color:${c.clientUpdated?'#2C6E48':'#fff'};font-size:13px;padding:8px 14px" onclick="sendClientUpdate('${c.id}')">${label}</button></div>`;
+  h += `<div class="act-bar"><div class="act-btns"><button class="btn-tiny" style="background:${c.clientUpdated?'#EFEDE6':'#3E8E5A'};color:${c.clientUpdated?'#2C6E48':'#fff'}" onclick="event.stopPropagation();sendClientUpdate('${c.id}')">${label}</button></div></div>`;
   return h;
 }
 function sendClientUpdate(id){
@@ -2207,11 +2213,11 @@ function nudgeBlock(kind, x){
   let h = '';
   if (x.nudge){
     h += `<div class="req-banner" style="border-color:#D64545;background:#FBEAEA;color:#B33">👉 <b>${esc(x.nudge.by)}</b> מבקש לטפל בזה · ${esc(x.nudge.t||'')}`;
-    if (USER === assignee) h += `<button class="btn-tiny ok" onclick="ackNudge('${kind}','${x.id}')">קיבלתי ✓</button>`;
-    else if (isAdmin()) h += `<button class="btn-tiny" onclick="ackNudge('${kind}','${x.id}')">✕ ביטול</button>`;
+    if (USER === assignee) h += `<div class="act-btns" style="margin-top:7px"><button class="btn-tiny ok" onclick="event.stopPropagation();ackNudge('${kind}','${x.id}')">קיבלתי ✓</button></div>`;
+    else if (isAdmin()) h += `<div class="act-btns" style="margin-top:7px"><button class="btn-tiny" onclick="event.stopPropagation();ackNudge('${kind}','${x.id}')">✕ ביטול</button></div>`;
     h += `</div>`;
   } else if (isAdmin() && !final && assignee && assignee !== USER){
-    h += `<div class="task-actions"><button class="btn-tiny" style="background:#FBEAEA;color:#B33" onclick="sendNudge('${kind}','${x.id}')">👉 נדנוד ל${esc(assignee)}</button></div>`;
+    h += `<div class="act-bar"><div class="act-btns"><button class="btn-tiny" style="background:#FBEAEA;color:#B33" onclick="event.stopPropagation();sendNudge('${kind}','${x.id}')">👉 נדנוד ל${esc(assignee)}</button></div></div>`;
   }
   return h;
 }
@@ -2248,11 +2254,12 @@ function billingBlock(kind, x){
   if (!final) return '';
   if (x.billing){
     return x.billing.state === 'billed'
-      ? `<div class="task-actions" style="color:#3E8E5A;font-weight:700;font-size:13px">💳 חויב ✓${x.billing.inv ? ` · חשבונית ${esc(x.billing.inv)}` : ''} (${esc(x.billing.by||'')})${isAdmin()?`<button class="btn-tiny" onclick="openInvoiceDoc('${kind}','${x.id}')">🧾 מסמך</button>`:''}</div>`
-      : `<div class="task-actions" style="color:#8A8F9C;font-weight:700;font-size:13px">➖ ללא חיוב (${esc(x.billing.by||'')})</div>`;
+      ? `<div class="act-bar"><div class="act-label" style="color:#3E8E5A">💳 חויב ✓${x.billing.inv ? ` · חשבונית ${esc(x.billing.inv)}` : ''}${x.billing.by?` · ${esc(x.billing.by)}`:''}</div>
+         ${isAdmin()?`<div class="act-btns"><button class="btn-tiny" onclick="event.stopPropagation();openInvoiceDoc('${kind}','${x.id}')">🧾 מסמך</button><button class="btn-tiny" onclick="event.stopPropagation();emailItem('${kind}','${x.id}')">📧 מייל</button></div>`:''}</div>`
+      : `<div class="act-bar"><div class="act-label" style="color:#8A8F9C">➖ ללא חיוב${x.billing.by?` · ${esc(x.billing.by)}`:''}</div></div>`;
   }
-  let h = `<div class="task-actions" style="color:#C9962E;font-weight:800;font-size:13px">💳 ממתין לחיוב`;
-  if (isAdmin()) h += `<button class="btn-tiny ok" onclick="markBilled('${kind}','${x.id}')">✓ חויב</button><button class="btn-tiny" onclick="markNoCharge('${kind}','${x.id}')">ללא חיוב</button><button class="btn-tiny" onclick="openInvoiceDoc('${kind}','${x.id}')">🧾 מסמך</button><button class="btn-tiny" onclick="emailItem('${kind}','${x.id}')">📧 מייל</button>`;
+  let h = `<div class="act-bar"><div class="act-label" style="color:#C9962E">💳 ממתין לחיוב</div>`;
+  if (isAdmin()) h += `<div class="act-btns"><button class="btn-tiny ok" onclick="event.stopPropagation();markBilled('${kind}','${x.id}')">✓ חויב</button><button class="btn-tiny" onclick="event.stopPropagation();markNoCharge('${kind}','${x.id}')">ללא חיוב</button><button class="btn-tiny" onclick="event.stopPropagation();openInvoiceDoc('${kind}','${x.id}')">🧾 מסמך</button><button class="btn-tiny" onclick="event.stopPropagation();emailItem('${kind}','${x.id}')">📧 מייל</button></div>`;
   return h + `</div>`;
 }
 function markBilled(kind, id){
@@ -2503,16 +2510,17 @@ function claimBlock(kind, x){
   if (READONLY || !USER) return '';
   const req = x.claimReq;
   if (req){
-    if (isAdmin()) return `<div class="claim-row">🙋 <b>${esc(req.by)}</b> מבקש לקחת
-      <button class="btn-mini" onclick="approveClaim('${kind}','${x.id}')">אישור</button>
-      <button class="btn-mini" style="background:#D64545" onclick="denyClaim('${kind}','${x.id}')">דחייה</button></div>`;
+    if (isAdmin()) return `<div class="claim-row" style="display:block">
+      <div class="act-label">🙋 <b>${esc(req.by)}</b> מבקש לקחת</div>
+      <div class="act-btns"><button class="btn-mini" onclick="event.stopPropagation();approveClaim('${kind}','${x.id}')">✓ אישור</button>
+      <button class="btn-mini" style="background:#D64545" onclick="event.stopPropagation();denyClaim('${kind}','${x.id}')">✕ דחייה</button></div></div>`;
     if (req.by === USER) return `<div class="claim-row">⏳ הבקשה שלך ממתינה לאישור מנהל</div>`;
     return `<div class="claim-row">🙋 ${esc(req.by)} ביקש לקחת את הפריט</div>`;
   }
   const assignee = kind==='task' ? x.assignee : x.technician;
   const closed = kind==='task' ? x.status==='אושר' : x.status==='נסגרה';
   if (!isAdmin() && !closed && assignee !== USER)
-    return `<div class="claim-row"><button class="btn-mini" style="background:#3B6EA5" onclick="requestClaim('${kind}','${x.id}')">🙋 בקש לקחת אליי</button></div>`;
+    return `<div class="claim-row" style="display:block"><div class="act-btns"><button class="btn-mini" style="background:#3B6EA5" onclick="event.stopPropagation();requestClaim('${kind}','${x.id}')">🙋 בקש לקחת אליי</button></div>`;
   return '';
 }
 function requestClaim(kind, id){
