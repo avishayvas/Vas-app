@@ -36,7 +36,7 @@ body {
 .vas-date { font-size: 13px; color: #C9962E; font-weight: 600; }
 .conn { font-size: 11px; font-weight: 700; }
 .conn.on { color: #5CB87A; } .conn.off { color: #D64545; }
-main { padding: 14px 14px 20px; max-width: 760px; margin: 0 auto; }
+main { padding: 14px 14px 150px; max-width: 760px; margin: 0 auto; }  /* מרווח לתפריט התחתון ולכפתור הצף */
 
 .kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
 .kpi { background: #fff; border-radius: 12px; padding: 12px 14px; border-inline-start: 5px solid #ccc; box-shadow: 0 1px 3px rgba(27,31,42,.07); }
@@ -74,7 +74,7 @@ main { padding: 14px 14px 20px; max-width: 760px; margin: 0 auto; }
 .task-photos { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
 .task-photos img { width: 54px; height: 54px; object-fit: cover; border-radius: 8px; cursor: pointer; border: 1px solid #E2DFD5; background: #EFEDE6; }
 
-.fab { position: fixed; bottom: 78px; inset-inline-start: 16px; z-index: 25; background: #C9962E; color: #fff; border: none; border-radius: 999px; padding: 13px 20px; font-family: inherit; font-weight: 800; font-size: 15px; box-shadow: 0 4px 14px rgba(201,150,46,.45); cursor: pointer; }
+.fab { position: fixed; bottom: calc(78px + env(safe-area-inset-bottom, 0px)); inset-inline-start: 16px; z-index: 25; background: #C9962E; color: #fff; border: none; border-radius: 999px; padding: 13px 20px; font-family: inherit; font-weight: 800; font-size: 15px; box-shadow: 0 4px 14px rgba(201,150,46,.45); cursor: pointer; }
 
 .vas-nav { position: fixed; bottom: 0; inset-inline: 0; z-index: 30; background: #1B1F2A; display: flex; padding: 6px 4px calc(6px + env(safe-area-inset-bottom)); }
 .vas-nav-btn { flex: 1; background: none; border: none; color: #8A8F9C; font-family: inherit; font-size: 11px; font-weight: 600; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 0; cursor: pointer; border-radius: 10px; }
@@ -141,6 +141,28 @@ main { padding: 14px 14px 20px; max-width: 760px; margin: 0 auto; }
   .kpi-value { font-size: 24px; }
   .proj-bar-name { width: 44%; font-size: 12px; }
 }
+
+/* ===== אחידות כפתורים ===== */
+.btn-primary,.btn-secondary,.btn-danger,.btn-mini,.btn-tiny{
+  font-family:inherit;border:0;border-radius:10px;cursor:pointer;line-height:1.25;
+  display:inline-flex;align-items:center;justify-content:center;gap:5px;text-align:center;
+  white-space:nowrap;-webkit-tap-highlight-color:transparent;transition:filter .12s,opacity .12s}
+.btn-primary:active,.btn-secondary:active,.btn-danger:active,.btn-mini:active,.btn-tiny:active{filter:brightness(.92)}
+.btn-primary,.btn-secondary,.btn-danger{min-height:46px;padding:12px 16px;font-size:15px;font-weight:800}
+.btn-secondary{font-weight:700}
+.btn-mini,.btn-tiny{min-height:36px;padding:7px 14px;font-size:13px;font-weight:700;flex:0 0 auto}
+.btn-tiny{background:#EFEDE6;color:#1B1F2A}
+.btn-tiny.ok{background:#3E8E5A;color:#fff}
+.btn-tiny.warn{background:#C9962E;color:#fff}
+.btn-tiny.danger{background:#FBEAEA;color:#D64545}
+.btn-tiny[disabled],.btn-mini[disabled]{opacity:.45;cursor:default}
+.task-actions,.form-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.task-actions{margin-top:8px}
+.form-actions>.btn-primary,.form-actions>.btn-secondary,.form-actions>.btn-danger{flex:1 1 140px}
+.mini-task .btn-mini,.mini-task .btn-tiny{align-self:center}
+.mini-task.tappable{cursor:pointer}
+.mini-task.tappable:active{background:#FAF8F2}
+
 /* ===== יומן עבודה ===== */
 .wl-num{font:700 13px ui-monospace,Menlo,Consolas,monospace;color:#C9962E;flex-shrink:0}
 .wl-tabs{display:flex;gap:6px}
@@ -867,12 +889,12 @@ function renderHome(){
       </div>` : ''}
     ${(()=>{ if(!isAdmin()) return '';
       const rets = [
-        ...S.tasks.filter(t=>t.status==='המשך טיפול'&&t.contDate&&t.contDate<=today()).map(t=>({label:projName(t.projectId)+' — '+t.title,cd:t.contDate,by:t.assignee})),
-        ...S.calls.filter(c=>c.status==='המשך טיפול'&&c.contDate&&c.contDate<=today()).map(c=>({label:c.customer+' — '+c.desc,cd:c.contDate,by:c.technician}))
+        ...S.tasks.filter(t=>t.status==='המשך טיפול'&&t.contDate&&t.contDate<=today()).map(t=>({label:projName(t.projectId)+' — '+t.title,cd:t.contDate,by:t.assignee,kind:'task',id:t.id})),
+        ...S.calls.filter(c=>c.status==='המשך טיפול'&&c.contDate&&c.contDate<=today()).map(c=>({label:c.customer+' — '+c.desc,cd:c.contDate,by:c.technician,kind:'call',id:c.id}))
       ];
       if(!rets.length) return '';
       return `<div class="card"><div class="card-title" style="color:#8E44AD">⏸️ הגיע מועד החזרה (${rets.length})</div>` + rets.map(r=>`
-        <div class="mini-task" style="cursor:default"><span class="dot" style="background:#8E44AD"></span>
+        <div class="mini-task tappable" onclick="${r.kind==='task'?'openTaskForm':'openCallForm'}('${r.id}')"><span class="dot" style="background:#8E44AD"></span>
         <div><div class="mini-task-title">${esc(r.label)}</div>
         <div class="mini-task-sub">חזרה: ${fmtDate(r.cd)}${r.cd<today()?' · ⚠️ עבר המועד':''}${r.by?' · '+esc(r.by):''}</div></div></div>`).join('') + `</div>`;
     })()}
@@ -880,20 +902,20 @@ function renderHome(){
       const un = S.calls.filter(c => (c.createdBy||'').startsWith('לקוח') && c.phone && !c.clientUpdated && c.status !== 'נסגרה');
       if(!un.length) return '';
       return `<div class="card"><div class="card-title" style="color:#3E8E5A">📱 ממתינים לאישור קבלה (${un.length})</div>` + un.map(c=>`
-        <div class="mini-task" style="cursor:default"><span class="dot" style="background:#3E8E5A"></span>
+        <div class="mini-task tappable" onclick="openCallForm('${c.id}')"><span class="dot" style="background:#3E8E5A"></span>
         <div style="flex:1"><div class="mini-task-title">${esc(c.customer)} — ${esc(c.desc)}</div>
         <div class="mini-task-sub">${fmtDate(c.created)}${c.createdTime?' · '+esc(c.createdTime):''}</div></div>
-        <button class="btn-mini" style="background:#3E8E5A" onclick="sendClientUpdate('${c.id}')">📱 שלח</button></div>`).join('') + `</div>`;
+        <button class="btn-mini" style="background:#3E8E5A" onclick="event.stopPropagation();sendClientUpdate('${c.id}')">📱 שלח</button></div>`).join('') + `</div>`;
     })()}
     ${(()=>{ if(!isAdmin()) return '';
       const reqs = [...S.tasks.filter(t=>t.claimReq).map(t=>({x:t,kind:'task',label:t.title})), ...S.calls.filter(c=>c.claimReq).map(c=>({x:c,kind:'call',label:c.customer}))];
       if(!reqs.length) return '';
       return `<div class="card"><div class="card-title" style="color:#C9962E">🙋 בקשות ממתינות לאישורך ${helpBtn('claim')}</div>` + reqs.map(r=>`
-        <div class="mini-task" style="cursor:default"><span class="dot" style="background:#C9962E"></span>
+        <div class="mini-task tappable" onclick="${r.kind==='task'?'openTaskForm':'openCallForm'}('${r.x.id}')"><span class="dot" style="background:#C9962E"></span>
         <div style="flex:1"><div class="mini-task-title">${esc(r.x.claimReq.by)} מבקש: ${esc(r.label)}</div>
         <div class="claim-row" style="margin-top:6px;border:none;background:none;padding:0">
-        <button class="btn-mini" style="background:#3E8E5A" onclick="approveClaim('${r.kind}','${r.x.id}')">✓ אישור</button>
-        <button class="btn-mini" style="background:#D64545" onclick="denyClaim('${r.kind}','${r.x.id}')">✕ דחייה</button>
+        <button class="btn-mini" style="background:#3E8E5A" onclick="event.stopPropagation();approveClaim('${r.kind}','${r.x.id}')">✓ אישור</button>
+        <button class="btn-mini" style="background:#D64545" onclick="event.stopPropagation();denyClaim('${r.kind}','${r.x.id}')">✕ דחייה</button>
         </div></div></div>`).join('') + `</div>`;
     })()}
     ${(()=>{ if(!isAdmin()) return '';
@@ -902,10 +924,10 @@ function renderHome(){
       const pending = ups.filter(u=>!u.paid).length;
       ups.sort((a,b)=>(a.paid===b.paid ? (b.d||'').localeCompare(a.d||'') : (a.paid?1:-1)));
       return `<div class="card"><div class="card-title" style="color:#3E8E5A">💰 מכירות ולידים לתגמול${pending?` — ${pending} ממתינות`:' — הכל תוגמל ✓'} ${helpBtn('upsell')}</div>` + ups.slice(0,6).map(u=>`
-        <div class="mini-task" style="cursor:default;${u.paid?'opacity:.5':''}"><span class="dot" style="background:${u.paid?'#8A8F9C':'#3E8E5A'}"></span>
+        <div class="mini-task tappable" style="${u.paid?'opacity:.5':''}" onclick="${u.kind==='task'?'openTaskForm':'openCallForm'}('${u.id}')"><span class="dot" style="background:${u.paid?'#8A8F9C':'#3E8E5A'}"></span>
         <div style="flex:1"><div class="mini-task-title">${u.type?`[${esc(u.type)}] `:''}${esc(u.what)}${u.amt?` — ${u.amt.toLocaleString()} ₪`:''}</div>
         <div class="mini-task-sub">${esc(u.who)} · ${fmtDate(u.d||'')}</div></div>
-        <button class="btn-mini" style="background:${u.paid?'#8A8F9C':'#3E8E5A'}" onclick="toggleUpsellPaid('${u.kind}','${u.id}')">${u.paid?'תוגמל ✓':'סמן כתוגמל'}</button></div>`).join('') + `</div>`;
+        <button class="btn-mini" style="background:${u.paid?'#8A8F9C':'#3E8E5A'}" onclick="event.stopPropagation();toggleUpsellPaid('${u.kind}','${u.id}')">${u.paid?'תוגמל ✓':'סמן כתוגמל'}</button></div>`).join('') + `</div>`;
     })()}
     ${(()=>{ if(!isAdmin()) return '';
       const bills = [
@@ -915,11 +937,11 @@ function renderHome(){
       if (!bills.length) return '';
       bills.sort((a,b)=>(b.d||'').localeCompare(a.d||''));
       return `<div class="card"><div class="card-title" style="color:#C9962E">💳 ממתינות לחיוב (${bills.length}) ${helpBtn('billing')}</div>` + bills.slice(0,6).map(b=>`
-        <div class="mini-task" style="cursor:default"><span class="dot" style="background:#C9962E"></span>
+        <div class="mini-task tappable" onclick="${b.kind==='task'?'openTaskForm':'openCallForm'}('${b.id}')"><span class="dot" style="background:#C9962E"></span>
         <div style="flex:1"><div class="mini-task-title">${esc(b.cust)} — ${esc(b.what)}</div>
         <div class="mini-task-sub">${esc(b.by)} · ${fmtDate(b.d)}</div>
-        <div class="task-actions"><button class="btn-tiny ok" onclick="markBilled('${b.kind}','${b.id}')">✓ חויב</button>
-        <button class="btn-tiny" onclick="markNoCharge('${b.kind}','${b.id}')">ללא חיוב</button></div></div></div>`).join('') + (bills.length>6?`<div class="settings-sub" style="text-align:center;margin-top:6px">ועוד ${bills.length-6} — הרשימה המלאה בדוח החיוב בלשונית דוחות</div>`:'') + `</div>`;
+        <div class="task-actions"><button class="btn-tiny ok" onclick="event.stopPropagation();markBilled('${b.kind}','${b.id}')">✓ חויב</button>
+        <button class="btn-tiny" onclick="event.stopPropagation();markNoCharge('${b.kind}','${b.id}')">ללא חיוב</button></div></div></div>`).join('') + (bills.length>6?`<div class="settings-sub" style="text-align:center;margin-top:6px">ועוד ${bills.length-6} — הרשימה המלאה בדוח החיוב בלשונית דוחות</div>`:'') + `</div>`;
     })()}
     <div class="card">
       <div class="card-title">קריאות שירות פתוחות</div>
