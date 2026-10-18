@@ -503,22 +503,38 @@ async function checkOut(){
 /* ימי עבודה: התחלה וסיום לכל עובד לכל יום */
 function workdays(from, to, person){
   const by = {};
-  allCheckins().forEach(c => {
-    if (!c.d || c.d < from || c.d > to || (person && c.by !== person)) return;
+  const put = (c, src) => {
+    if (!c || !c.d || !c.t || c.d < from || c.d > to || (person && c.by !== person)) return;
     const k = c.by + '|' + c.d;
-    (by[k] = by[k] || { who:c.by, d:c.d, ev:[] }).ev.push(c);
-  });
+    const day = by[k] = by[k] || { who:c.by, d:c.d, main:[], site:[] };
+    day[src].push(c);
+  };
+  allCheckins().forEach(c => put(c, 'main'));
+  // לחיצות קודמות מתוך משימות וקריאות ("הגעתי לאתר" / "סיום עבודה באתר")
+  ((S && S.tasks) || []).forEach(t => (t.presence||[]).forEach(p => put(p, 'site')));
+  ((S && S.calls) || []).forEach(c => (c.presence||[]).forEach(p => put(p, 'site')));
+  const byT = (a,b)=>(a.t||'').localeCompare(b.t||'');
   return Object.values(by).map(day => {
-    day.ev.sort((a,b)=>(a.t||'').localeCompare(b.t||''));
-    let open = null, mins = 0, missingEnd = false, missingStart = false;
-    day.ev.forEach(e => {
-      if (e.type === 'in'){ if (open) missingEnd = true; open = e; }
-      else if (open){ mins += Math.max(0, toMins(e.t) - toMins(open.t)); open = null; }
-      else missingStart = true;
-    });
-    const ins = day.ev.filter(e=>e.type==='in'), outs = day.ev.filter(e=>e.type==='out');
-    const first = ins[0] || null, lastOut = outs[outs.length-1] || null;
-    return { who:day.who, d:day.d, start:first, end: open ? null : lastOut, mins, open: !!open, missingEnd, missingStart, breaks: Math.max(0, ins.length-1) };
+    if (day.main.length){
+      const ev = day.main.sort(byT);
+      let open = null, mins = 0, missingEnd = false, missingStart = false;
+      ev.forEach(e => {
+        if (e.type === 'in'){ if (open) missingEnd = true; open = e; }
+        else if (open){ mins += Math.max(0, toMins(e.t) - toMins(open.t)); open = null; }
+        else missingStart = true;
+      });
+      const ins = ev.filter(e=>e.type==='in'), outs = ev.filter(e=>e.type==='out');
+      return { who:day.who, d:day.d, start:ins[0]||null, end: open ? null : (outs[outs.length-1]||null), mins, open: !!open, missingEnd, missingStart, breaks: Math.max(0, ins.length-1), fromSites:false };
+    }
+    // אין סימון יום עבודה — לפי הלחיצה הראשונה והאחרונה באתרים
+    const ev = day.site.sort(byT);
+    const ins = ev.filter(e=>e.type==='in'), outs = ev.filter(e=>e.type==='out');
+    const start = ins[0] || null;
+    const end = outs.length && (!start || outs[outs.length-1].t >= start.t) ? outs[outs.length-1] : null;
+    const lastEv = ev[ev.length-1];
+    const open = !!start && lastEv.type === 'in';
+    const mins = start && end && !open ? Math.max(0, toMins(end.t) - toMins(start.t)) : 0;
+    return { who:day.who, d:day.d, start, end: open ? null : end, mins, open, missingEnd:false, missingStart: !start, breaks:0, fromSites:true };
   }).sort((a,b)=> a.who.localeCompare(b.who) || a.d.localeCompare(b.d));
 }
 const mapLink = c => c && c.lat ? `https://maps.google.com/?q=${c.lat},${c.lng}` : '';
@@ -537,10 +553,12 @@ function buildWorkdayReport(from, to, person){
     msg += `▫️ ${fmtDate(r.d)}: ${st} – ${en}${r.mins ? ' (' + fmtDur(r.mins) + ')' : ''}`;
     if (r.breaks) msg += r.breaks === 1 ? ' · הפסקה אחת' : ` · ${r.breaks} הפסקות`;
     if (r.missingStart) msg += ' · סיום בלי התחלה ⚠️';
+    if (r.fromSites) msg += ' · 🏗️ לפי סימונים באתרים';
     if ((r.start && r.start.noGps) || (r.end && r.end.noGps)) msg += ' · ללא GPS';
     msg += '\n';
   });
   close();
+  if (rows.some(r=>r.fromSites)) msg += '\n🏗️ = לא סומן יום עבודה במסך הראשי; השעות לפי הלחיצה הראשונה והאחרונה במשימות/קריאות\n';
   return msg + '\n_VAS Security Technology LTD_';
 }
 function exportWorkdayXlsx(){
@@ -553,7 +571,7 @@ function exportWorkdayXlsx(){
   list.forEach(r => {
     if (r.who !== cur){ close(); cur = r.who; tot = 0; }
     tot += r.mins;
-    const notes = [r.end ? '' : (r.open && r.d === today() ? 'עדיין בעבודה' : 'לא סומן סיום'), r.missingStart ? 'סיום בלי התחלה' : '', r.breaks ? (r.breaks === 1 ? 'הפסקה אחת' : r.breaks + ' הפסקות') : ''].filter(Boolean).join(' · ');
+    const notes = [r.end ? '' : (r.open && r.d === today() ? 'עדיין בעבודה' : 'לא סומן סיום'), r.missingStart ? 'סיום בלי התחלה' : '', r.fromSites ? 'לפי סימונים באתרים' : '', r.breaks ? (r.breaks === 1 ? 'הפסקה אחת' : r.breaks + ' הפסקות') : ''].filter(Boolean).join(' · ');
     rows.push([r.who, fmtDate(r.d), r.start ? r.start.t : '', r.end ? r.end.t : '', +(r.mins/60).toFixed(2), notes, mapLink(r.start), mapLink(r.end)]);
   });
   close();
