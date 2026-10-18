@@ -70,7 +70,9 @@ main { padding: 14px 14px 150px; max-width: 760px; margin: 0 auto; }  /* מרו�
 .task-meta { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 7px; font-size: 12.5px; color: #555B69; cursor: pointer; }
 .task-meta .overdue { color: #D64545; font-weight: 700; }
 .task-meta a { color: #3B6EA5; text-decoration: none; font-weight: 600; }
-.task-notes { margin-top: 6px; font-size: 12.5px; color: #6B7080; background: #FAF9F4; border-radius: 8px; padding: 6px 10px; }
+.task-notes { margin-top: 6px; font-size: 12.5px; color: #6B7080; background: #FAF9F4; border-radius: 8px; padding: 6px 10px; white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
+.task-meta span, .task-title { white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
+.modal-body textarea { resize: vertical; min-height: 64px; line-height: 1.5; }
 .task-photos { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
 .task-photos img { width: 54px; height: 54px; object-fit: cover; border-radius: 8px; cursor: pointer; border: 1px solid #E2DFD5; background: #EFEDE6; }
 
@@ -782,10 +784,10 @@ async function importIntake(docId, d){
     id: uid(), created: today(),
     createdTime: String(dt.getHours()).padStart(2,'0') + ':' + String(dt.getMinutes()).padStart(2,'0'),
     customer: (d.site || '').trim(),
-    desc: (d.topic ? d.topic : '') + (d.action ? ' · ' + d.action : '') + (d.qty ? ' · כמות: ' + d.qty : '') + ((d.desc) ? ' — ' + d.desc : ''),
+    desc: (d.topic ? d.topic : '') + (d.action ? ' · ' + d.action : '') + (d.symptoms && d.symptoms.length ? '\n🔎 ' + d.symptoms.join(' · ') : '') + (d.qty ? '\n📦 כמות: ' + d.qty : '') + ((d.desc) ? '\n' + d.desc : ''),
     phone: (d.phone || '').trim(),
     technician: '', urgency: urgMap[d.urgency] || 'רגיל', status: 'חדשה',
-    notes: 'נפתח על ידי הלקוח דרך הטופס' + (d.name ? ' · איש קשר: ' + d.name : ''),
+    notes: 'נפתח על ידי הלקוח דרך הטופס' + (d.name ? ' · איש קשר: ' + d.name : '') + (d.when ? '\n🕒 זמינות: ' + d.when : '') + (d.down ? '\n⚠️ ' + d.down : ''),
     createdBy: 'לקוח: ' + (d.name || 'טופס')
   };
   if (d.photoIds && d.photoIds.length){
@@ -894,7 +896,10 @@ function modalShell(title, bodyHtml){
         <div class="modal-body">${bodyHtml}</div>
       </div>
     </div>`;
+  setTimeout(autoGrowAll, 0);
 }
+function autoGrow(el){ el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight + 4, 420) + 'px'; }
+function autoGrowAll(){ document.querySelectorAll('#modalRoot textarea').forEach(t => { autoGrow(t); t.addEventListener('input', () => autoGrow(t)); }); }
 function copyText(text){
   const ta = document.createElement('textarea');
   ta.value = text; ta.style.position='fixed'; ta.style.opacity='0';
@@ -1194,6 +1199,7 @@ function taskCard(t){
       ${claimBlock('task', t)}
       ${nudgeBlock('task', t)}
       ${presenceBlock('task', t)}
+      ${finishBlock('task', t)}
       ${t.signId?`<div class="act-bar"><div class="act-btns"><button class="btn-tiny" style="background:#EFF7F0;color:#2C6E48" onclick="event.stopPropagation();openPhoto('${t.signId}')">✍️ חתימת לקוח${t.signName?`: ${esc(t.signName)}`:''}</button></div></div>`:(!READONLY&&USER?`<div class="act-bar"><div class="act-btns"><button class="btn-tiny" onclick="event.stopPropagation();openSignModal('task','${t.id}')">✍️ החתמת לקוח</button></div></div>`:'')}
       ${billingBlock('task', t)}
     </div>`;
@@ -1246,12 +1252,12 @@ function openTaskForm(id){
     <textarea id="tf_notes" rows="2" placeholder="פרטים נוספים, חומרים, תיאום…">${esc(f.notes)}</textarea>
     <label style="color:#3B6EA5">🔧 דיווח ביצוע — מה בוצע בפועל</label>
     <textarea id="tf_done" rows="2" placeholder="לדוגמה: הותקנו נקודות תקשורת בקומה 5, בוצעו בדיקות Fluke">${esc(f.doneDesc||'')}</textarea>
-    <input id="tf_doneqty" value="${esc(f.doneQty||'')}" placeholder="כמויות: 12 נק׳ · 3 גלאים · 40 מ׳ כבל" style="margin-top:8px">
+    <textarea id="tf_doneqty" rows="2"  placeholder="כמויות: 12 נק׳ · 3 גלאים · 40 מ׳ כבל" style="margin-top:8px">${esc(f.doneQty||'')}</textarea>
     <label style="color:#3B6EA5">🛠️ דיווח ביצוע — מה בוצע בפועל ${helpBtn('report')}</label>
     <textarea id="tf_report" rows="2" placeholder="לדוגמה: הותקנו נקודות בקומה 3, בוצעו בדיקות Fluke">${esc(f.report||'')}</textarea>
-    <input id="tf_qty" value="${esc(f.qty||'')}" placeholder="כמות — לדוגמה: 12 נקודות / 3 מצלמות" style="margin-top:8px">
+    <textarea id="tf_qty" rows="2"  placeholder="כמות — לדוגמה: 12 נקודות / 3 מצלמות" style="margin-top:8px">${esc(f.qty||'')}</textarea>
     <label style="color:#3E8E5A">💰 מכירה נוספת / ליד (לתיעוד לצורך תגמול) ${helpBtn('upsell')}</label>
-    <input id="tf_upsell" value="${esc(f.upsell||'')}" placeholder="מה נמכר או זוהה? לדוגמה: מפצל HDMI / הרחבת מצלמות">
+    <textarea id="tf_upsell" rows="2"  placeholder="מה נמכר או זוהה? לדוגמה: מפצל HDMI / הרחבת מצלמות">${esc(f.upsell||'')}</textarea>
     <select id="tf_upstype" style="margin-top:8px">
       <option value=""${!f.upsellType?' selected':''}>— סוג —</option>
       <option${f.upsellType==='מוצר'?' selected':''}>מוצר</option>
@@ -1275,7 +1281,7 @@ function renderFormPhotos(){
     <div class="photo-thumb">
       ${p.kind==='video' ? `<div class="vid-thumb">▶</div>` : `<img ${p.data?`src="${p.data}"`:`data-photoid="${p.id}"`} alt="">`}
       <button onclick="pendingPhotos.splice(${i},1);renderFormPhotos()">✕</button>
-    </div>`).join('') + `<button class="photo-add" onclick="document.getElementById('tf_file').click()">📷</button>`;
+    </div>`).join('') + `<button class="photo-add" title="צילום" onclick="openCam('image')">📸<div style="font-size:10px;font-weight:700">צילום</div></button><button class="photo-add" title="וידאו" onclick="openCam('video')">🎥<div style="font-size:10px;font-weight:700">וידאו</div></button><button class="photo-add" title="מהגלריה" onclick="document.getElementById('tf_file').click()">🖼️<div style="font-size:10px;font-weight:700">גלריה</div></button>`;
   hydratePhotos();
 }
 async function saveTask(id){
@@ -1374,6 +1380,7 @@ function renderCalls(){
         ${claimBlock('call', c)}
         ${nudgeBlock('call', c)}
         ${presenceBlock('call', c)}
+        ${finishBlock('call', c)}
         ${c.signId?`<div class="act-bar"><div class="act-btns"><button class="btn-tiny" style="background:#EFF7F0;color:#2C6E48" onclick="event.stopPropagation();openPhoto('${c.signId}')">✍️ חתימת לקוח${c.signName?`: ${esc(c.signName)}`:''}</button></div></div>`:(!READONLY&&USER?`<div class="act-bar"><div class="act-btns"><button class="btn-tiny" onclick="event.stopPropagation();openSignModal('call','${c.id}')">✍️ החתמת לקוח</button></div></div>`:'')}
         ${billingBlock('call', c)}
       </div>`).join('')}
@@ -1407,7 +1414,7 @@ function openCallForm(id){
     </select>
     <input id="cf_customer_other" placeholder="שם הלקוח / האתר" value="${known ? '' : esc(f.customer)}" style="margin-top:8px;${known ? 'display:none' : ''}">
     <label>תיאור התקלה *</label>
-    <input id="cf_desc" value="${esc(f.desc)}" placeholder="מצלמה 4 לא מקליטה">
+    <textarea id="cf_desc" rows="2"  placeholder="מצלמה 4 לא מקליטה">${esc(f.desc)}</textarea>
     <label>טלפון איש קשר</label>
     <input id="cf_phone" value="${esc(f.phone)}" inputmode="tel">
     <div class="form-2col">
@@ -1422,12 +1429,12 @@ function openCallForm(id){
     <textarea id="cf_notes" rows="2">${esc(f.notes)}</textarea>
     <label style="color:#3B6EA5">🔧 דיווח ביצוע — מה בוצע בפועל</label>
     <textarea id="tf_done" rows="2" placeholder="לדוגמה: הותקנו נקודות תקשורת בקומה 5, בוצעו בדיקות Fluke">${esc(f.doneDesc||'')}</textarea>
-    <input id="tf_doneqty" value="${esc(f.doneQty||'')}" placeholder="כמויות: 12 נק׳ · 3 גלאים · 40 מ׳ כבל" style="margin-top:8px">
+    <textarea id="tf_doneqty" rows="2"  placeholder="כמויות: 12 נק׳ · 3 גלאים · 40 מ׳ כבל" style="margin-top:8px">${esc(f.doneQty||'')}</textarea>
     <label style="color:#3B6EA5">🛠️ דיווח ביצוע — מה בוצע בפועל ${helpBtn('report')}</label>
     <textarea id="tf_report" rows="2" placeholder="לדוגמה: הותקנו נקודות בקומה 3, בוצעו בדיקות Fluke">${esc(f.report||'')}</textarea>
-    <input id="tf_qty" value="${esc(f.qty||'')}" placeholder="כמות — לדוגמה: 12 נקודות / 3 מצלמות" style="margin-top:8px">
+    <textarea id="tf_qty" rows="2"  placeholder="כמות — לדוגמה: 12 נקודות / 3 מצלמות" style="margin-top:8px">${esc(f.qty||'')}</textarea>
     <label style="color:#3E8E5A">💰 מכירה נוספת / ליד (לתיעוד לצורך תגמול) ${helpBtn('upsell')}</label>
-    <input id="tf_upsell" value="${esc(f.upsell||'')}" placeholder="מה נמכר או זוהה? לדוגמה: מפצל HDMI / הרחבת מצלמות">
+    <textarea id="tf_upsell" rows="2"  placeholder="מה נמכר או זוהה? לדוגמה: מפצל HDMI / הרחבת מצלמות">${esc(f.upsell||'')}</textarea>
     <select id="tf_upstype" style="margin-top:8px">
       <option value=""${!f.upsellType?' selected':''}>— סוג —</option>
       <option${f.upsellType==='מוצר'?' selected':''}>מוצר</option>
@@ -1976,7 +1983,7 @@ function openReportModal(kind, id, nextStatus){
     <label>מה בוצע בפועל</label>
     <textarea id="rp_text" rows="3" placeholder="לדוגמה: הותקנו נקודות בקומה 3, הוחלף גלאי, בוצעו בדיקות">${esc(x.report||'')}</textarea>
     <label>כמות</label>
-    <input id="rp_qty" value="${esc(x.qty||'')}" placeholder="12 נקודות / 3 מצלמות / יחידה 1">
+    <textarea id="rp_qty" rows="2"  placeholder="12 נקודות / 3 מצלמות / יחידה 1">${esc(x.qty||'')}</textarea>
     <label>⏸️ מועד חזרה משוער (אם ממשיכים ביום אחר)</label>
     <input id="rp_cont" type="date" value="${esc(x.contDate||'')}">
     <label>✍️ חתימת לקוח (לא חובה)</label>
@@ -1986,7 +1993,7 @@ function openReportModal(kind, id, nextStatus){
     <div class="form-actions">
       <button class="btn-secondary" onclick="applyReport('${kind}','${id}','${esc(nextStatus)}',true)">דילוג</button>
       <button class="btn-secondary" style="background:#F3EAF9;color:#8E44AD;font-weight:800" onclick="applyReport('${kind}','${id}','המשך טיפול',false)">⏸️ המשך טיפול</button>
-      <button class="btn-primary" onclick="applyReport('${kind}','${id}','${esc(nextStatus)}',false)">סגירה ✓</button>
+      <button class="btn-primary" style="background:#3E8E5A" onclick="applyReport('${kind}','${id}','${esc(nextStatus)}',false)">✅ סיום עבודה — לחיוב</button>
     </div>`);
   initSignPad();
 }
@@ -2061,18 +2068,24 @@ async function applyReport(kind, id, nextStatus, skip){
       } catch(e){ toastMsg('שגיאה בשמירת החתימה'); }
     }
   }
+  const closing = (kind==='task' && nextStatus==='בוצע') || (kind==='call' && nextStatus==='נסגרה');
+  const lastMine = (x.presence||[]).slice().reverse().find(p=>p.by===USER);
+  if (closing && lastMine && lastMine.type==='in'){
+    const pos = await getPos();
+    x.presence.push(Object.assign({ by: USER, type:'out', d: today(), t: nowTime(), auto:true, noGps: !pos }, pos || {}));
+  }
   x.status = nextStatus;
   x.nudge = null;
   const cdEl = document.getElementById('rp_cont');
   x.contDate = (nextStatus === 'המשך טיפול' && cdEl) ? cdEl.value : '';
   x.updatedBy = USER; x.updatedAt = today();
   if (kind === 'task'){
-    if (x.status === 'אושר'){ x.closedBy = USER; x.closedAt = today(); x.closedTime = nowTime(); } else { x.closedBy = ''; x.closedAt = ''; x.closedTime = ''; }
+    if (x.status === 'אושר' || x.status === 'בוצע'){ if (x.status === 'אושר' || !x.closedBy){ x.closedBy = USER; x.closedAt = today(); x.closedTime = nowTime(); } } else { x.closedBy = ''; x.closedAt = ''; x.closedTime = ''; }
   } else {
     if (x.status === 'נסגרה'){ x.closedBy = USER; x.closedAt = today(); x.closedTime = nowTime(); } else { x.closedBy = ''; x.closedAt = ''; x.closedTime = ''; }
   }
   pushLog('עדכן סטטוס "' + (kind==='task'?x.title:x.customer) + '" ל-' + nextStatus + (x.report && !skip ? ' · דיווח: ' + x.report.slice(0,60) : ''));
-  closeModal(); persist(); render(); toastMsg('סטטוס עודכן: ' + nextStatus);
+  closeModal(); persist(); render(); toastMsg(closing ? '✅ העבודה הסתיימה ועברה לחיוב' : 'סטטוס עודכן: ' + nextStatus);
 }
 const SLA_HOURS = { 'דחוף': 2, 'גבוה': 8, 'רגיל': 24, 'נמוך': 48 };
 function minutesSince(d, t){
@@ -2103,6 +2116,16 @@ function slaBadge(c){
   const limit = (SLA_HOURS[c.urgency] || 24) * 60;
   const over = age > limit;
   return `<span style="color:${over ? '#D64545' : '#6B7080'};font-weight:${over ? '800' : '600'}">⏱️ פתוחה ${fmtAge(age)}${over ? ' ⚠️' : ''}</span>`;
+}
+function finishBlock(kind, x){
+  if (READONLY || !USER) return '';
+  const final = kind==='task' ? ['בוצע','אושר'].includes(x.status) : x.status==='נסגרה';
+  if (final) return `<div class="task-notes" style="background:#EFF7F0;color:#2C6E48;font-weight:700">✅ העבודה הסתיימה${x.closedBy||x.updatedBy?' · '+esc(x.closedBy||x.updatedBy):''}${x.closedAt||x.updatedAt?' · '+fmtDate(x.closedAt||x.updatedAt):''}${x.closedTime?' '+esc(x.closedTime):''}${x.billing?'':' — ממתין לחיוב 💳'}</div>`;
+  return `<div class="act-bar"><div class="act-btns" style="width:100%"><button class="btn-mini" style="background:#3E8E5A;width:100%;padding:11px;font-size:14px" onclick="event.stopPropagation();finishWork('${kind}','${x.id}')">✅ סיימתי את העבודה — להעביר לחיוב</button></div></div>`;
+}
+function finishWork(kind, id){
+  if (!guardEdit()) return;
+  openReportModal(kind, id, kind==='task' ? 'בוצע' : 'נסגרה');
 }
 function presenceBlock(kind, x){
   let h = '';
@@ -2664,8 +2687,17 @@ function closeMedia(){
   vid.removeAttribute('src');
   document.getElementById('photoOverlay').style.display = 'none';
 }
+function openCam(kind){
+  const src = document.getElementById('tf_file'); if (!src) return;
+  let cam = document.getElementById('tf_cam');
+  if (!cam){ cam = document.createElement('input'); cam.type = 'file'; cam.id = 'tf_cam'; cam.style.display = 'none'; src.parentNode.insertBefore(cam, src); cam.onchange = src.onchange; }
+  cam.accept = kind === 'video' ? 'video/*' : 'image/*';
+  cam.setAttribute('capture', 'environment');
+  cam.click();
+}
 function attachMediaInput(){
   const el = document.getElementById('tf_file'); if (!el) return;
+  const old = document.getElementById('tf_cam'); if (old) old.remove();
   el.onchange = async e => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;

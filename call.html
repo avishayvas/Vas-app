@@ -34,6 +34,16 @@ input:focus, select:focus, textarea:focus { outline: 2px solid #C9962E; border-c
 .done .big { font-size: 52px; }
 .done h2 { margin: 12px 0 8px; color: #1B1F2A; }
 .done p { color: #555B69; font-size: 15px; line-height: 1.6; }
+.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.tile { background: #fff; border: 1.5px solid #DDD9CC; border-radius: 12px; padding: 12px 4px 10px; text-align: center; font-family: inherit; font-weight: 700; font-size: 13px; color: #1B1F2A; cursor: pointer; line-height: 1.25; }
+.tile .ic { display: block; font-size: 26px; margin-bottom: 4px; }
+.tile.sel { border-color: #C9962E; background: #FBF2DC; box-shadow: 0 0 0 2px #C9962E inset; }
+.chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.chip { background: #fff; border: 1.5px solid #DDD9CC; border-radius: 20px; padding: 9px 13px; font-family: inherit; font-weight: 600; font-size: 14px; color: #1B1F2A; cursor: pointer; }
+.chip.sel { background: #1B1F2A; border-color: #1B1F2A; color: #fff; }
+.step { display: none; }
+.step.on { display: block; }
+.hint { font-size: 12.5px; color: #7A7F8C; font-weight: 500; margin-top: -2px; margin-bottom: 6px; }
 .hp { position: fixed; top: -9999px; left: -9999px; width: 1px; height: 1px; opacity: 0; }
 </style>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -55,30 +65,26 @@ input:focus, select:focus, textarea:focus { outline: 2px solid #C9962E; border-c
     <label>אתר / סניף / כתובת *</label>
     <input id="f_site" placeholder="מקס סטוק חולון / שם האתר">
 
-    <label>נושא התקלה *</label>
-    <select id="f_topic">
-      <option value="">— בחרו נושא —</option>
-      <option>מצלמות אבטחה</option>
-      <option>אזעקה / פריצה</option>
-      <option>בקרת כניסה / דלתות</option>
-      <option>אינטרקום</option>
-      <option>גילוי אש</option>
-      <option>תקשורת / אינטרנט</option>
-      <option>כריזה</option>
-      <option>אחר</option>
-    </select>
+    <label>במה התקלה? *</label>
+    <div class="tiles" id="topicTiles"></div>
+    <input type="hidden" id="f_topic">
 
-    <label>סוג הטיפול הנדרש *</label>
-    <select id="f_action">
-      <option value="">— בחרו —</option>
-      <option>תיקון תקלה</option>
-      <option>החלפת רכיב</option>
-      <option>בדיקה / כיול</option>
-      <option>התקנה חדשה / הרחבה</option>
-      <option>פריסת קווים / תשתית</option>
-      <option>העתקת רכיב למיקום אחר</option>
-      <option>אחר</option>
-    </select>
+    <div class="step" id="stepSym">
+      <label>מה קורה? <span style="font-weight:500">(אפשר לבחור כמה)</span></label>
+      <div class="chips" id="symChips"></div>
+    </div>
+
+    <div class="step" id="stepAct">
+      <label>מה צריך לעשות? *</label>
+      <div class="hint">לא בטוחים? בחרו "שהטכנאי יבדוק"</div>
+      <div class="chips" id="actChips"></div>
+      <input type="hidden" id="f_action">
+    </div>
+
+    <div class="step" id="stepDown">
+      <label>המערכת עובדת?</label>
+      <div class="chips" id="downChips"></div>
+    </div>
 
     <label>כמות רכיבים (אם רלוונטי)</label>
     <input id="f_qty" placeholder="לדוגמה: 3 מצלמות / 2 גלאים / קו אחד">
@@ -96,7 +102,10 @@ input:focus, select:focus, textarea:focus { outline: 2px solid #C9962E; border-c
     <button type="button" onclick="document.getElementById('f_photos').click()" style="width:100%;padding:12px;border:1.5px dashed #C9962E;border-radius:10px;background:#FBF7EE;color:#7A5E1E;font-family:inherit;font-weight:700;font-size:14px;cursor:pointer">📷 צילום / בחירת תמונות</button>
     <div id="thumbs" style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"></div>
 
-    <label>תיאור מפורט *</label>
+    <label>מתי נוח שנגיע?</label>
+    <div class="chips" id="whenChips"></div>
+
+    <label id="descLbl">פרטים נוספים</label>
     <textarea id="f_desc" rows="4" placeholder="מה קרה, איפה בדיוק, ממתי, כמה רכיבים מעורבים"></textarea>
 
     <input class="hp" id="f_company" tabindex="-1" autocomplete="off">
@@ -152,20 +161,69 @@ function renderThumbs(){
     `<div style="position:relative"><img src="${p}" style="width:74px;height:74px;object-fit:cover;border-radius:10px;border:1.5px solid #DDD9CC">
      <button type="button" onclick="pendingPhotos.splice(${i},1);renderThumbs()" style="position:absolute;top:-6px;left:-6px;width:22px;height:22px;border-radius:50%;border:none;background:#D64545;color:#fff;font-weight:800;cursor:pointer;line-height:1">✕</button></div>`).join('');
 }
-const TOPIC_HINTS = {
-  'מצלמות אבטחה': 'כמה מצלמות? איפה הן? מה הבעיה — אין תמונה / מטושטש / לא מקליט? נדרש קו או מצלמה חדשה?',
-  'אזעקה / פריצה': 'מה קורה — התראות שווא / אזור לא נדרך / סוללה? איזה אזור? כמה גלאים?',
-  'בקרת כניסה / דלתות': 'איזו דלת/שער? הקורא לא קורא / הדלת לא ננעלת / כרטיסים חדשים? כמה עמדות?',
-  'אינטרקום': 'איזו עמדה/דירה? אין שמע / אין וידאו / הדלת לא נפתחת? כמה שפופרות?',
-  'גילוי אש': 'איזה אזור בלוח? התראת אמת או תקלה? כמה גלאים? יש דרישת מכון תקנים?',
-  'תקשורת / אינטרנט': 'איזה ציוד — ראוטר / סוויץ׳ / נקודות? כמה נקודות? נדרשת פריסה חדשה?',
-  'כריזה': 'איזה אזור לא נשמע? כמה רמקולים? הבעיה בעוצמה או שאין שמע כלל?',
-  'אחר': 'תארו בפירוט: מה, איפה, ממתי, וכמה רכיבים מעורבים'
-};
-document.getElementById('f_topic').addEventListener('change', function(){
-  const h = TOPIC_HINTS[this.value];
-  if (h) document.getElementById('f_desc').placeholder = h;
-});
+const TOPICS = [
+  { k:'מצלמות אבטחה', ic:'📹', t:'מצלמות',
+    sym:['אין תמונה במצלמה','כל המצלמות לא עובדות','תמונה מטושטשת / מלוכלכת','לא מקליט / חסרות הקלטות','אין צפייה מהטלפון','ראיית לילה לא עובדת','מצלמה זזה / נפגעה','המסך / המקליט לא נדלק'],
+    act:['שליפת הקלטה / גיבוי','ניקוי וכיוון מצלמות','הוספת מצלמות','הגדרת צפייה בטלפון'],
+    hint:'איזו מצלמה / איפה? ממתי? כמה מצלמות מושפעות?' },
+  { k:'אזעקה / פריצה', ic:'🚨', t:'אזעקה',
+    sym:['התראות שווא','אזור / גלאי לא נדרך','הלוח מצפצף','תקלת סוללה / חשמל','הקודן לא עובד','הסירנה לא עובדת','לא מקבלים התראות לטלפון','שכחנו קוד'],
+    act:['החלפת סוללה','הוספת גלאים','חיבור למוקד / לאפליקציה','שינוי קודים'],
+    hint:'איזה אזור או גלאי? ממתי? יש הודעה על הלוח?' },
+  { k:'בקרת כניסה / דלתות', ic:'🚪', t:'בקרת כניסה',
+    sym:['הקורא לא קורא כרטיס / תג','הדלת לא ננעלת','הדלת לא נפתחת','השער / המחסום תקוע','טביעת אצבע / פנים לא מזהה','לחצן יציאה לא עובד','דלת נשארת פתוחה / מצפצפת'],
+    act:['הוספה / מחיקת משתמשים ותגים','התקנת עמדה חדשה','החלפת מנעול / אלקטרומגנט','שינוי הרשאות ושעות'],
+    hint:'איזו דלת / שער? כמה עמדות? כמה משתמשים להוסיף?' },
+  { k:'אינטרקום', ic:'🔔', t:'אינטרקום',
+    sym:['אין שמע','אין וידאו','הדלת לא נפתחת מהשפופרת','לא מצלצל בדירה / משרד','האינטרקום בטלפון לא עובד','לחצן / עמדה שבורים'],
+    act:['החלפת שפופרת / עמדה','הוספת שפופרת','חיבור לאפליקציה בטלפון'],
+    hint:'איזו עמדה / דירה? כמה שפופרות?' },
+  { k:'גילוי אש', ic:'🔥', t:'גילוי אש',
+    sym:['הלוח בתקלה','התראת שווא','גלאי מצפצף','הלוח מצפצף ולא מפסיק','מנדף / כיבוי במטבח','צריך אישור למכון התקנים'],
+    act:['בדיקה תקופתית','הכנה לבדיקת מכון התקנים','החלפת גלאים','הוספת גלאים / לחצנים'],
+    hint:'איזה אזור או ערוץ מופיע בלוח? יש דרישה ממכון התקנים / כיבוי אש?' },
+  { k:'תקשורת / אינטרנט', ic:'🌐', t:'תקשורת ורשת',
+    sym:['אין אינטרנט','אינטרנט איטי / נופל','נקודת רשת לא עובדת','Wi-Fi חלש באזור','מדפסת / קופה לא מתחברת','טלפוניה לא עובדת'],
+    act:['פריסת נקודות רשת חדשות','התקנת Wi-Fi / מגדיל טווח','סידור ארון תקשורת','החלפת סוויץ׳ / ראוטר'],
+    hint:'כמה נקודות? איפה? מי ספק האינטרנט?' },
+  { k:'כריזה', ic:'📢', t:'כריזה',
+    sym:['אין שמע באזור','שמע חלש / מעוות','רעשים / זמזום','המוזיקה לא מתנגנת','המיקרופון לא עובד'],
+    act:['הוספת רמקולים','החלפת מגבר','חלוקה לאזורים'],
+    hint:'איזה אזור? כמה רמקולים?' },
+  { k:'חדר שרתים', ic:'🖥️', t:'חדר שרתים',
+    sym:['שרת / ארון לא נדלק','חום גבוה בחדר','רעש / מזגן לא עובד','ארון מבולגן','גיבוי חשמל (UPS) מצפצף'],
+    act:['ניקוי חדר שרתים','סידור וסימון כבלים','בדיקת UPS וחשמל'],
+    hint:'מה הבעיה בחדר? כמה ארונות?' },
+  { k:'אחר', ic:'❓', t:'אחר', sym:[], act:['ייעוץ / הצעת מחיר'], hint:'תארו בפירוט: מה, איפה, ממתי' }
+];
+const COMMON_ACTS = ['תיקון תקלה','החלפת רכיב','ניקוי','כיוון / כיול','תשתית חדשה (כבילה)','טיפול בתקלת תשתית / כבל','העתקת רכיב למקום אחר','התקנה / הרחבה','הדרכה / הגדרות'];
+const DOWN_OPTS = ['לא עובדת בכלל','עובדת חלקית','עובדת — רק צריך שיפור'];
+const WHEN_OPTS = ['כמה שיותר מהר','היום','מחר','בוקר (8–12)','צהריים (12–16)','תאום טלפוני'];
+let topic = null, symptoms = [], action = '', down = '', when = '';
+function chipsHtml(list, selFn, onName){ return list.map((o,i)=>`<button type="button" class="chip${selFn(o)?' sel':''}" onclick="${onName}(${i})">${o}</button>`).join(''); }
+function drawPicker(){
+  document.getElementById('topicTiles').innerHTML = TOPICS.map((t,i)=>`<button type="button" class="tile${topic===t?' sel':''}" onclick="pickTopic(${i})"><span class="ic">${t.ic}</span>${t.t}</button>`).join('');
+  const on = !!topic;
+  ['stepSym','stepAct','stepDown'].forEach(id => document.getElementById(id).classList.toggle('on', on));
+  if (topic && !topic.sym.length) document.getElementById('stepSym').classList.remove('on');
+  if (!on) return;
+  document.getElementById('symChips').innerHTML = chipsHtml(topic.sym, o=>symptoms.includes(o), 'pickSym');
+  document.getElementById('actChips').innerHTML = chipsHtml(actList(), o=>action===o, 'pickAct');
+  document.getElementById('downChips').innerHTML = chipsHtml(DOWN_OPTS, o=>down===o, 'pickDown');
+  document.getElementById('f_topic').value = topic.k;
+  document.getElementById('f_action').value = action;
+  document.getElementById('f_desc').placeholder = topic.hint;
+  document.getElementById('descLbl').textContent = needDesc() ? 'תיאור מפורט *' : 'פרטים נוספים (לא חובה)';
+}
+function actList(){ return ['שהטכנאי יבדוק', ...COMMON_ACTS, ...topic.act]; }
+function pickTopic(i){ if (topic !== TOPICS[i]){ topic = TOPICS[i]; symptoms = []; action = ''; } drawPicker(); }
+function pickSym(i){ const o = topic.sym[i]; symptoms = symptoms.includes(o) ? symptoms.filter(x=>x!==o) : [...symptoms, o]; drawPicker(); }
+function pickAct(i){ action = actList()[i]; drawPicker(); }
+function pickDown(i){ down = down === DOWN_OPTS[i] ? '' : DOWN_OPTS[i]; drawPicker(); }
+function pickWhen(i){ when = when === WHEN_OPTS[i] ? '' : WHEN_OPTS[i]; drawWhen(); }
+function drawWhen(){ document.getElementById('whenChips').innerHTML = chipsHtml(WHEN_OPTS, o=>when===o, 'pickWhen'); }
+function needDesc(){ return !topic || topic.k === 'אחר' || !symptoms.length; }
+drawPicker(); drawWhen();
 document.querySelectorAll('.urg-btn').forEach(b => {
   b.onclick = () => {
     document.querySelectorAll('.urg-btn').forEach(x => x.classList.remove('sel'));
@@ -179,16 +237,13 @@ async function send(){
   const name = document.getElementById('f_name').value.trim();
   const phone = document.getElementById('f_phone').value.trim();
   const site = document.getElementById('f_site').value.trim();
-  const topic = document.getElementById('f_topic').value;
-  const action = document.getElementById('f_action').value;
   const qty = document.getElementById('f_qty').value.trim();
   const desc = document.getElementById('f_desc').value.trim();
   if (document.getElementById('f_company').value) return; /* honeypot */
-  if (!name || !phone || !site || !topic || !action || !desc){
-    err.textContent = 'נא למלא את כל השדות המסומנים ב-*';
-    return;
-  }
-  if (desc.length < 15){
+  if (!name || !phone || !site){ err.textContent = 'נא למלא שם, טלפון ואתר'; return; }
+  if (!topic){ err.textContent = 'בחרו במה התקלה'; return; }
+  if (!action){ err.textContent = 'בחרו מה צריך לעשות (או "שהטכנאי יבדוק")'; return; }
+  if (needDesc() && desc.length < 15){
     err.textContent = 'תיאור קצר מדי — פרטו מה קרה, איפה וכמה רכיבים, כדי שנגיע מוכנים';
     return;
   }
@@ -201,7 +256,7 @@ async function send(){
       photoIds.push(ref.id);
     }
     await db.collection('vas_intake').add({
-      name, phone, site, topic, action, qty, desc, urgency, photoIds,
+      name, phone, site, topic: topic.k, action, symptoms, down, when, qty, desc, urgency, photoIds,
       at: new Date().toISOString()
     });
     document.getElementById('form').style.display = 'none';
