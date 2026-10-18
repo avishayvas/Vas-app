@@ -126,6 +126,13 @@ main { padding: 14px 14px 150px; max-width: 760px; margin: 0 auto; }  /* מרו�
 .cr-fault { font-size: 13px; color: #1B1F2A; margin: 5px 0 4px; white-space: pre-wrap; word-break: break-word; }
 .cr-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: #555B69; }
 .cr-st { font-weight: 700; }
+.bill-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid #EFEDE6; cursor: pointer; }
+.bill-row:first-of-type { border-top: none; }
+.bill-main { flex: 1; min-width: 0; }
+.bill-what { font-weight: 700; font-size: 13.5px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
+.bill-sub { font-size: 11.5px; color: #8A8F9C; margin-top: 2px; }
+.bill-btns { display: flex; gap: 6px; flex-shrink: 0; }
+.arch-month { font-size: 12px; font-weight: 800; color: #C9962E; margin: 12px 0 2px; border-bottom: 1px solid #EFE6CF; padding-bottom: 3px; }
 .photo-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
 .photo-thumb { position: relative; }
 .photo-thumb img { width: 64px; height: 64px; object-fit: cover; border-radius: 10px; border: 1px solid #E2DFD5; }
@@ -356,6 +363,7 @@ let S = null;
 let tab = 'home';
 let filters = { proj:'all', status:'open', assignee:'all', special:null };
 let callsShowClosed = false;
+let billShowAll = false, archQ = '';
 let reportProj = '', reportPerson = '', reportDate = '';
 let billFrom = '', billTo = '';
 let stmtCust = '';
@@ -1329,12 +1337,16 @@ function renderHome(){
       ];
       if (!bills.length) return '';
       bills.sort((a,b)=>(b.d||'').localeCompare(a.d||''));
-      return `<div class="card" id="billCard"><div class="card-title" style="color:#C9962E">💳 ממתינות לחיוב (${bills.length}) ${helpBtn('billing')}</div>` + bills.slice(0,6).map(b=>`
-        <div class="mini-task tappable" onclick="${b.kind==='task'?'openTaskForm':'openCallForm'}('${b.id}')"><span class="dot" style="background:#C9962E"></span>
-        <div style="flex:1"><div class="mini-task-title">${esc(b.cust)} — ${esc(b.what)}</div>
-        <div class="mini-task-sub">${esc(b.by)} · ${fmtDate(b.d)}</div>
-        <div class="task-actions"><button class="btn-tiny ok" onclick="event.stopPropagation();markBilled('${b.kind}','${b.id}')">✓ חויב</button>
-        <button class="btn-tiny" onclick="event.stopPropagation();markNoCharge('${b.kind}','${b.id}')">ללא חיוב</button></div></div></div>`).join('') + (bills.length>6?`<div class="settings-sub" style="text-align:center;margin-top:6px">ועוד ${bills.length-6} — הרשימה המלאה בדוח החיוב בלשונית דוחות</div>`:'') + `</div>`;
+      const shown = billShowAll ? bills : bills.slice(0,4);
+      return `<div class="card" id="billCard">
+        <div class="card-title" style="color:#C9962E;display:flex;justify-content:space-between;align-items:center"><span>💳 ממתינות לחיוב (${bills.length}) ${helpBtn('billing')}</span><button class="btn-tiny" onclick="openBillArchive()">🗄️ ארכיון</button></div>
+        <div class="settings-sub" style="margin:-4px 0 6px">עבודות שהסתיימו ועוד לא חויבו. אחרי הוצאת חשבונית — "סמן שחויב" והעבודה עוברת לארכיון.</div>
+        ${shown.map(b=>`<div class="bill-row" onclick="${b.kind==='task'?'openTaskForm':'openCallForm'}('${b.id}')">
+          <div class="bill-main"><div class="bill-what">${esc(b.cust)} — ${esc(String(b.what||'').split('\n')[0])}</div><div class="bill-sub">${b.kind==='task'?'📋 משימה':'🛠️ קריאה'} · ${esc(b.by)} · ${fmtDate(b.d)}</div></div>
+          <div class="bill-btns"><button class="btn-tiny ok" onclick="event.stopPropagation();markBilled('${b.kind}','${b.id}')">סמן שחויב</button><button class="btn-tiny" onclick="event.stopPropagation();markNoCharge('${b.kind}','${b.id}')">ללא חיוב</button></div>
+        </div>`).join('')}
+        ${bills.length>4?`<button class="btn-secondary" style="width:100%;margin-top:8px" onclick="billShowAll=!billShowAll;render()">${billShowAll?'▲ הצג פחות':'▼ הצג את כל '+bills.length}</button>`:''}
+      </div>`;
     })()}
     <div class="card">
       <div class="card-title">קריאות שירות פתוחות</div>
@@ -1967,6 +1979,7 @@ function renderReports(){
       <div class="form-actions">
         <button class="btn-secondary" onclick="copyReport('billing')">📋 העתקה</button>
         <button class="btn-secondary" onclick="pdfReport('billing')">📄 PDF</button>
+        <button class="btn-secondary" onclick="openBillArchive()">🗄️ ארכיון חיובים</button>
         <button class="btn-secondary" onclick="exportBillingXlsx()">📊 אקסל</button>
         <button class="btn-primary" onclick="waReport('billing')">💬 וואטסאפ</button>
       </div>
@@ -2732,6 +2745,44 @@ function billingBlock(kind, x){
   if (isAdmin()) h += `<div class="act-btns"><button class="btn-tiny ok" onclick="event.stopPropagation();markBilled('${kind}','${x.id}')">✓ חויב</button><button class="btn-tiny" onclick="event.stopPropagation();markNoCharge('${kind}','${x.id}')">ללא חיוב</button><button class="btn-tiny" onclick="event.stopPropagation();openInvoiceDoc('${kind}','${x.id}')">🧾 מסמך</button><button class="btn-tiny" onclick="event.stopPropagation();emailItem('${kind}','${x.id}')">📧 מייל</button></div>`;
   return h + `</div>`;
 }
+/* ==================== ארכיון חיובים ==================== */
+function billArchiveRows(){
+  const q = archQ.trim();
+  return [
+    ...S.tasks.filter(t=>t.billing).map(t=>({ kind:'task', x:t, cust:projName(t.projectId), what:t.title })),
+    ...S.calls.filter(c=>c.billing).map(c=>({ kind:'call', x:c, cust:c.customer, what:String(c.desc||'').split('\n')[0] }))
+  ].filter(r => !q || (r.cust + ' ' + r.what + ' ' + (r.x.billing.inv||'')).includes(q))
+   .sort((a,b)=>(b.x.billing.d||'').localeCompare(a.x.billing.d||''));
+}
+function openBillArchive(){
+  if (!isAdmin()) return;
+  modalShell('🗄️ ארכיון חיובים', `<input id="archQ" value="${esc(archQ)}" placeholder="🔎 חיפוש לקוח, עבודה או מספר חשבונית" oninput="archQ=this.value;drawBillArchive()" style="margin-bottom:10px"><div id="archList"></div>`);
+  drawBillArchive();
+}
+function drawBillArchive(){
+  const el = document.getElementById('archList'); if (!el) return;
+  const rows = billArchiveRows();
+  if (!rows.length){ el.innerHTML = '<div class="empty" style="padding:16px;text-align:center;color:#8A8F9C">אין עבודות בארכיון</div>'; return; }
+  let cur = '', h = '';
+  rows.forEach(r => {
+    const m = (r.x.billing.d||'').slice(0,7);
+    if (m !== cur){ cur = m; const [y,mo] = m.split('-'); h += `<div class="arch-month">${mo&&y?mo+'/'+y:'ללא תאריך'}</div>`; }
+    const billed = r.x.billing.state === 'billed';
+    h += `<div class="bill-row">
+      <div class="bill-main"><div class="bill-what">${esc(r.cust)} — ${esc(r.what)}</div>
+      <div class="bill-sub"><span style="color:${billed?'#3E8E5A':'#8A8F9C'};font-weight:700">${billed?'✓ חויב':'➖ ללא חיוב'}</span>${r.x.billing.inv?' · חשבונית '+esc(r.x.billing.inv):''} · ${fmtDate(r.x.billing.d||'')}${r.x.billing.by?' · '+esc(r.x.billing.by):''}</div></div>
+      <div class="bill-btns"><button class="btn-tiny" onclick="unBill('${r.kind}','${r.x.id}')">↩ החזרה</button></div>
+    </div>`;
+  });
+  el.innerHTML = `<div class="settings-sub" style="margin-bottom:6px">${rows.length} עבודות</div>` + h;
+}
+function unBill(kind, id){
+  const x = _find(kind, id); if (!x) return;
+  if (!confirm('להחזיר את העבודה לרשימת הממתינות לחיוב?')) return;
+  x.billing = null;
+  pushLog('↩ החזיר לממתינים לחיוב: ' + (kind==='task'?x.title:x.customer));
+  persist(); render(); drawBillArchive(); toastMsg('הוחזר לממתינים לחיוב');
+}
 function markBilled(kind, id){
   if (!isAdmin()){ toastMsg('סימון חיוב למנהלים בלבד'); return; }
   const arr = kind === 'task' ? S.tasks : S.calls;
@@ -2739,7 +2790,7 @@ function markBilled(kind, id){
   const inv = (prompt('מספר חשבונית (לא חובה):') || '').trim();
   x.billing = { state: 'billed', inv, by: USER, d: today() };
   pushLog('💳 סימן כחויב' + (inv ? ' (חשבונית ' + inv + ')' : '') + ': ' + (kind==='task'?x.title:x.customer));
-  persist(); render(); toastMsg('סומן כחויב ✓');
+  persist(); render(); toastMsg('✓ חויב — עבר לארכיון');
 }
 function markNoCharge(kind, id){
   if (!isAdmin()){ toastMsg('למנהלים בלבד'); return; }
