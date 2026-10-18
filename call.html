@@ -110,7 +110,8 @@ input:focus, select:focus, textarea:focus { outline: 2px solid #C9962E; border-c
     <button type="button" onclick="document.getElementById('f_photos').click()" style="width:100%;padding:12px;border:1.5px dashed #C9962E;border-radius:10px;background:#FBF7EE;color:#7A5E1E;font-family:inherit;font-weight:700;font-size:14px;cursor:pointer">📷 צילום / בחירת תמונות</button>
     <div id="thumbs" style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"></div>
 
-    <label>מתי נוח שנגיע?</label>
+    <label>מתי נוח לכם? <span style="font-weight:500">(לא חובה)</span></label>
+    <div class="hint">העדפה בלבד — מועד ההגעה ייקבע בתיאום טלפוני, בהתאם לזמינות הצוות</div>
     <div class="chips" id="whenChips"></div>
 
     <label id="descLbl">פרטים נוספים</label>
@@ -125,7 +126,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid #C9962E; border-c
   <div class="done" id="done">
     <div class="big">✅</div>
     <h2>הקריאה נקלטה!</h2>
-    <p>הצוות שלנו קיבל את הפנייה<br>וניצור קשר בהקדם לתיאום טיפול.<br><br><b>VAS Security · ש.ו טכנולוגיות ביטחון</b></p>
+    <p>הצוות שלנו קיבל את הפנייה<br>וניצור קשר בהקדם לתיאום מועד הטיפול,<br>בהתאם לזמינות הצוות.<br><br><b>VAS Security · ש.ו טכנולוגיות ביטחון</b></p>
   </div>
 </div>
 
@@ -206,7 +207,7 @@ const TOPICS = [
 ];
 const COMMON_ACTS = ['תיקון תקלה','החלפת רכיב','ניקוי','כיוון / כיול','תשתית חדשה (כבילה)','טיפול בתקלת תשתית / כבל','העתקת רכיב למקום אחר','התקנה / הרחבה','הדרכה / הגדרות'];
 const DOWN_OPTS = ['לא עובדת בכלל','עובדת חלקית','עובדת — רק צריך שיפור'];
-const WHEN_OPTS = ['כמה שיותר מהר','היום','מחר','בוקר (8–12)','צהריים (12–16)','תאום טלפוני'];
+const WHEN_OPTS = ['כמה שיותר מהר','היום','מחר','בוקר (8–12)','צהריים (12–16)','גמיש — תתאמו איתי'];
 let topic = null, symptoms = [], action = '', down = '', when = '';
 function chipsHtml(list, selFn, onName){ return list.map((o,i)=>`<button type="button" class="chip${selFn(o)?' sel':''}${(list.length%2 && i===list.length-1 && onName!=='pickDown')?' wide':''}" onclick="${onName}(${i})">${o}</button>`).join(''); }
 function drawPicker(){
