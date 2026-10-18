@@ -804,7 +804,7 @@ function startData(){
   }, () => {});
   unsubAlerts = ALERTS_DOC.onSnapshot(snap => {
     try { ALERTS = snap.exists && snap.data().data ? JSON.parse(snap.data().data) : {}; } catch(e){ ALERTS = {}; }
-    if (S) render();
+    if (S){ render(); setTimeout(alertSweep, 2500); }
   }, e => console.warn('alerts:', e.code));
   unsubCheckins = CHECKINS_DOC.onSnapshot(snap => {
     CHECKINS = (snap.exists && snap.data().list) || [];
@@ -824,6 +824,7 @@ function startData(){
   if (snap.exists && !snap.metadata.hasPendingWrites) serverState = JSON.stringify(S);
   bindUserFromAuth();
   setTimeout(dayStartNag, 1500);
+  setTimeout(alertSweep, 4000);
   maybeNotifyNew();
   processRecurring();
   render();
@@ -1214,6 +1215,57 @@ function xlsxReport(kind){
   downloadXlsx(aoa, (REPORT_TITLES[kind]||'דוח').slice(0,28), 'vas-' + kind + '-' + today() + '.xlsx');
 }
 function linkify(html){ return html.replace(/https:\/\/maps\.google\.com\/\?q=([\d.\-]+),([\d.\-]+)/g, (m)=>`<a href="${m}" target="_blank" style="color:#2A6FDB;font-weight:800;text-decoration:underline">פתח במפה</a>`); }
+/* ==================== התרעות נוכחות בתוך האפליקציה ====================
+   רץ על כל מכשיר שפותח את האפליקציה: מכשיר של עובד בודק את עצמו, מכשיר של מנהל בודק את כולם.
+   אותו מבנה ומפתחות כמו בסקריפט המיילים — כך שלא נספרת התרעה כפולה. */
+const ALERT_START = '2026-10-19';
+let _sweepAt = 0;
+function alertWorkers(){ return (S.team||[]).filter(m => m.name && !/מנהל/.test(m.role||'') && m.kind !== 'קבלן' && !/קבלן/.test(m.role||'')); }
+function isWorkDay(d){ return new Date(d + 'T12:00:00').getDay() <= 4; }
+function alertSweep(){
+  if (READONLY || !USER || !S || Date.now() - _sweepAt < 10 * 60000) return;
+  _sweepAt = Date.now();
+  const who = isHoursAdmin() ? alertWorkers().map(m => m.name) : (alertWorkers().some(m => m.name === USER) ? [USER] : []);
+  if (!who.length) return;
+  const now = nowTime(), t = today();
+  const days = []; for (let i = 0; i <= 6; i++){ const d = addDays(t, -i); if (d >= ALERT_START && isWorkDay(d)) days.push(d); }
+  const all = allCheckins();
+  const found = [];
+  days.forEach(d => who.forEach(name => {
+    const mine = all.filter(c => c.by === name && c.d === d).sort((a,b) => (a.t||'').localeCompare(b.t||''));
+    const last = mine[mine.length - 1];
+    if (!mine.length && (d < t || now >= '08:30')) found.push({ d, name, type:'in' });
+    else if (last && last.type === 'in' && (d < t || now >= '18:00')) found.push({ d, name, type:'out' });
+  }));
+  if (!found.length) return;
+  const sent = ALERTS.sent || {}, ex = ALERTS.exempt || {};
+  const fresh = found.filter(f => !sent[f.d + '|' + f.type + '|' + f.name] && !(ex[f.d] || {})[f.name]);
+  if (!fresh.length) return;
+  alertsSave(a => {
+    a.sent = a.sent || {}; a.strikes = a.strikes || {}; a.red = a.red || {};
+    fresh.forEach(f => {
+      const key = f.d + '|' + f.type + '|' + f.name;
+      if (a.sent[key] || ((a.exempt||{})[f.d] || {})[f.name]) return;
+      const list = (a.strikes[f.name] || []).filter(x => daysSince(x.d) < 30);
+      list.push({ d: f.d, type: f.type, src: 'app' });
+      a.strikes[f.name] = list; a.sent[key] = true;
+      if (list.length % 3 === 0) a.red[f.name] = { d: f.d, n: list.length };
+    });
+  }).then(() => {
+    const mineNew = fresh.filter(f => f.name === USER);
+    if (mineNew.length && !isHoursAdmin()) setTimeout(() => alertPopup(mineNew), 800);
+  });
+}
+function alertPopup(list){
+  if (document.querySelector('.modal-overlay')) return;
+  const n = strikesOf(USER).length;
+  const red = n && n % 3 === 0;
+  const txt = list.map(f => `${fmtDate(f.d)} — לא סומנה ${f.type==='in' ? 'כניסה לעבודה (עד 08:30)' : 'יציאה מהעבודה'}`).join('<br>');
+  modalShell(red ? '🔴 חריגה בדיווח נוכחות' : '⚠️ התרעת נוכחות', `
+    <div style="background:${red?'#FDECEC':'#FFF7E6'};border:1.5px solid ${red?'#D64545':'#E08A2E'};border-radius:10px;padding:12px;font-weight:700;color:${red?'#B23A3A':'#8A5A12'}">${txt}</div>
+    <div class="settings-sub" style="margin:12px 0">${red ? 'זו ההתרעה ה-' + n + '. זה מצב חריג ולא תקין — <b>הנושא הועבר להנהלה.</b>' : 'התרעה ' + (n % 3) + ' מתוך 3. בהתרעה השלישית הנושא עובר להנהלה.'}<br>יש לסמן כל יום "התחלת יום עבודה" עד 08:30 ו"סיום יום עבודה" בסוף היום.</div>
+    <div class="form-actions"><button class="btn-primary" onclick="closeModal()">הבנתי</button></div>`);
+}
 function alertBanner(){
   if (READONLY || !USER || isHoursAdmin()) return '';
   const st = strikesOf(USER); if (!st.length) return '';
@@ -1231,8 +1283,8 @@ function alertsAdminCard(){
   const noEmail = team.filter(m => !m.email);
   const anyAlerts = rows.some(r => r.st.length);
   return `<div class="card">
-    <div class="card-title">🔔 התרעות נוכחות במייל (30 יום)</div>
-    <div class="settings-sub" style="margin:-4px 0 8px">08:30 — מי שלא סימן כניסה · 18:00 — מי שלא סימן יציאה · כל ${3} התרעות → מייל אדום עם העתק אליך ולהילה${ALERTS.updated?'':' · <b style="color:#B23A3A">הסקריפט עוד לא רץ</b>'}</div>
+    <div class="card-title">🔔 התרעות נוכחות (30 יום)</div>
+    <div class="settings-sub" style="margin:-4px 0 8px">08:30 — מי שלא סימן כניסה · 18:00 — מי שלא סימן יציאה · ההתרעה מוצגת לעובד באפליקציה · כל 3 התרעות → חריגה אדומה${ALERTS.updated && Object.values(ALERTS.strikes||{}).flat().some(x=>!x.src)?' · 📧 גם במייל':' · 📧 מיילים: עוד לא הותקן'}</div>
     ${rows.map(r => `<div class="al-row${r.red && daysSince(r.red.d) < 7 ? ' red' : ''}">
       <span class="al-name">${esc(r.m.name)}</span>
       <span class="al-n">${r.st.length ? (r.red && daysSince(r.red.d) < 7 ? '🔴 ' : '⚠️ ') + r.st.length + ' התרעות' : '<span style="color:#3E8E5A">✓ תקין</span>'}${r.st.length ? `<small>${r.st.slice(-3).map(x => fmtDate(x.d).slice(0,5) + ' ' + (x.type==='in'?'כניסה':'יציאה')).join(' · ')}</small>` : ''}</span>
@@ -1253,6 +1305,7 @@ function alertReset(name){
   alertsSave(a => { if (a.strikes) delete a.strikes[name]; if (a.red) delete a.red[name]; });
   pushLog('איפס התרעות נוכחות: ' + name);
 }
+setInterval(() => { try { alertSweep(); } catch(e){} }, 15 * 60000);
 function dayStartNag(){
   if (READONLY || !USER || isHoursAdmin() || window._dayNagShown) return;
   if (new Date().getDay() === 6) return; // שבת
