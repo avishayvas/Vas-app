@@ -1046,7 +1046,7 @@ function callsReportCard(){
         </div>
       </div>`).join('')}</div>` : '<div class="empty" style="padding:16px;text-align:center;color:#8A8F9C">אין קריאות לפי הסינון</div>'}
     <div class="form-actions" style="margin-top:10px">
-      <button class="btn-secondary" onclick="printCallsReport()">🖨️ הדפסה / PDF</button>
+      <button class="btn-secondary" onclick="printCallsReport()">📄 PDF / הדפסה</button>
       <button class="btn-secondary" onclick="exportCallsXlsx()">📊 אקסל</button>
       <button class="btn-primary" onclick="waReport('calls')">💬 וואטסאפ</button>
     </div>
@@ -1097,6 +1097,70 @@ function printCallsReport(){
   document.body.appendChild(f);
   f.onload = () => { try { f.contentWindow.focus(); f.contentWindow.print(); } catch(err){ toastMsg('ההדפסה נחסמה'); } setTimeout(() => f.remove(), 60000); };
   f.srcdoc = html;
+}
+/* ==================== PDF / אקסל לכל דוח טקסט ==================== */
+const REPORT_TITLES = { daily:'דוח יומי — בוצע / נותר לביצוע', proj:'דוח פרויקט', person:'תוכנית עבודה לאיש צוות', workday:'דוח נוכחות ושעות', presence:'נוכחות באתרים', billing:'דוח עבודות לחיוב', calls:'דוח קריאות שירות' };
+function reportText(kind){
+  return kind==='calls' ? buildCallsReport() : kind==='workday' ? buildWorkdayReport(wdFrom, wdTo, wdWho) : kind==='presence' ? buildPresenceReport(presFrom, presTo, presWho) : kind==='billing' ? buildBillingReport(billFrom, billTo) : kind==='daily' ? buildDailyReport(reportDate) : kind==='proj' ? buildProjReport(reportProj) : buildPersonReport(reportPerson);
+}
+/* מפרק טקסט דוח לשורות: כותרת ראשית, תת-כותרות (*...*), פריטים ושורות המשך */
+function parseReport(text){
+  const lines = String(text||'').split('\n');
+  const out = { title:'', sub:[], items:[] };
+  let section = '';
+  lines.forEach((raw, i) => {
+    const l = raw.replace(/\s+$/,'');
+    if (!l.trim()) return;
+    if (/^_.*_$/.test(l.trim())) return;
+    const bold = l.trim().match(/^([^\w*]*)\*(.+)\*\s*$/);
+    if (!out.title && bold){ out.title = bold[2]; return; }
+    if (!out.items.length && !section && !bold && !/^\s*(▫️|•|-|🔴|🟠|📍|🏁|▶️|⏹)/.test(l)){ out.sub.push(l.trim()); return; }
+    if (bold && !/^\s/.test(l)){ section = (bold[1] + bold[2]).trim(); out.items.push({ type:'h', text: section }); return; }
+    if (/^\s{2,}/.test(l) && out.items.length && out.items[out.items.length-1].type === 'i'){ out.items[out.items.length-1].more.push(l.trim()); return; }
+    out.items.push({ type:'i', section, text: l.trim().replace(/^(▫️|•|-)\s*/, ''), more: [] });
+  });
+  return out;
+}
+function pdfReport(kind){
+  const r = parseReport(reportText(kind));
+  const e = s => String(s||'').replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
+  const fmt = s => e(s).replace(/\*([^*]+)\*/g, '<b>$1</b>').replace(/https:\/\/maps\.google\.com\/\?q=[\d.,\-]+/g, m => `<a href="${m}">📍 מפה</a>`);
+  const body = r.items.map(it => it.type === 'h'
+    ? `<h3>${fmt(it.text)}</h3>`
+    : `<div class="it"><div>${fmt(it.text)}</div>${it.more.map(m=>`<div class="mo">${fmt(m)}</div>`).join('')}</div>`).join('');
+  const html = `<!doctype html><html dir="rtl" lang="he"><head><meta charset="utf-8"><title>${e(r.title || REPORT_TITLES[kind])}</title>
+  <style>@page{size:A4;margin:14mm}body{font-family:Arial,'Heebo',sans-serif;color:#1B1F2A;margin:0;font-size:12.5px}
+  .hd{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #C9962E;padding-bottom:8px;margin-bottom:12px}
+  .brand{font-size:22px;font-weight:900;color:#C9962E;letter-spacing:1px}.brand span{color:#1B1F2A;font-weight:300;font-size:14px;letter-spacing:3px}
+  h1{font-size:18px;margin:0}.sub{font-size:12px;color:#555B69;margin-top:3px}
+  h3{font-size:14px;margin:14px 0 6px;padding:5px 10px;background:#1B1F2A;color:#fff;border-radius:6px}
+  .it{padding:6px 10px;border-bottom:1px solid #E6E2D6;break-inside:avoid}.it:nth-of-type(even){background:#FAF8F2}
+  .mo{color:#555B69;font-size:11.5px;margin-top:2px;padding-right:12px}a{color:#2A6FDB;text-decoration:none}
+  .ft{margin-top:12px;font-size:10px;color:#8A8F9C;text-align:left}</style></head><body>
+  <div class="hd"><div><h1>${e(r.title || REPORT_TITLES[kind])}</h1><div class="sub">${r.sub.map(e).join(' · ')} · הופק ${fmtDate(today())} ${nowTime()}</div></div><div class="brand">VAS <span>SECURITY</span></div></div>
+  ${body || '<div class="it">אין נתונים</div>'}
+  <div class="ft">VAS Security Technology LTD</div></body></html>`;
+  printHtml(html);
+}
+function printHtml(html){
+  const f = document.createElement('iframe');
+  f.style.cssText = 'position:fixed;width:0;height:0;border:0;left:-9999px';
+  document.body.appendChild(f);
+  f.onload = () => { try { f.contentWindow.focus(); f.contentWindow.print(); } catch(err){ toastMsg('ההדפסה נחסמה'); } setTimeout(() => f.remove(), 60000); };
+  f.srcdoc = html;
+}
+function xlsxReport(kind){
+  const r = parseReport(reportText(kind));
+  const items = r.items.filter(it => it.type === 'i');
+  if (!items.length){ toastMsg('אין נתונים לייצוא'); return; }
+  const clean = s => String(s||'').replace(/\*/g,'').trim();
+  const aoa = [[clean(r.title || REPORT_TITLES[kind])], [r.sub.map(clean).join(' · ')], [], ['קטגוריה','פריט','פרטים','הערות']];
+  items.forEach(it => {
+    const t = clean(it.text);
+    const m = t.match(/^(.+?)\s+[—–]\s+(.+)$/);
+    aoa.push([clean(it.section).replace(/^[^֐-׿A-Za-z0-9]+/,''), m ? m[1] : t, m ? m[2] : '', it.more.map(clean).join(' | ')]);
+  });
+  downloadXlsx(aoa, (REPORT_TITLES[kind]||'דוח').slice(0,28), 'vas-' + kind + '-' + today() + '.xlsx');
 }
 function linkify(html){ return html.replace(/https:\/\/maps\.google\.com\/\?q=([\d.\-]+),([\d.\-]+)/g, (m)=>`<a href="${m}" target="_blank" style="color:#2A6FDB;font-weight:800;text-decoration:underline">פתח במפה</a>`); }
 function dayStartNag(){
@@ -1837,6 +1901,8 @@ function renderReports(){
       <pre class="report-preview">${esc(dailyRep)}</pre>
       <div class="form-actions">
         <button class="btn-secondary" onclick="copyReport('daily')">📋 העתקה</button>
+        <button class="btn-secondary" onclick="pdfReport('daily')">📄 PDF</button>
+        <button class="btn-secondary" onclick="xlsxReport('daily')">📊 אקסל</button>
         <button class="btn-primary" onclick="waReport('daily')">💬 שליחה בוואטסאפ</button>
       </div>
     </div>
@@ -1855,6 +1921,7 @@ function renderReports(){
       <pre class="report-preview">${linkify(esc(buildWorkdayReport(wdFrom, wdTo, wdWho)))}</pre>
       <div class="form-actions">
         <button class="btn-secondary" onclick="copyReport('workday')">📋 העתקה</button>
+        <button class="btn-secondary" onclick="pdfReport('workday')">📄 PDF</button>
         <button class="btn-secondary" onclick="exportWorkdayXlsx()">📊 אקסל</button>
         <button class="btn-primary" onclick="waReport('workday')">💬 וואטסאפ</button>
       </div>
@@ -1873,6 +1940,7 @@ function renderReports(){
       <pre class="report-preview">${linkify(esc(buildPresenceReport(presFrom, presTo, presWho)))}</pre>
       <div class="form-actions">
         <button class="btn-secondary" onclick="copyReport('presence')">📋 העתקה</button>
+        <button class="btn-secondary" onclick="pdfReport('presence')">📄 PDF</button>
         <button class="btn-secondary" onclick="exportPresenceXlsx()">📊 אקסל</button>
         <button class="btn-primary" onclick="waReport('presence')">💬 וואטסאפ</button>
       </div>
@@ -1898,6 +1966,7 @@ function renderReports(){
       <pre class="report-preview">${esc(buildBillingReport(billFrom, billTo))}</pre>
       <div class="form-actions">
         <button class="btn-secondary" onclick="copyReport('billing')">📋 העתקה</button>
+        <button class="btn-secondary" onclick="pdfReport('billing')">📄 PDF</button>
         <button class="btn-secondary" onclick="exportBillingXlsx()">📊 אקסל</button>
         <button class="btn-primary" onclick="waReport('billing')">💬 וואטסאפ</button>
       </div>
@@ -1910,6 +1979,8 @@ function renderReports(){
       <pre class="report-preview">${esc(projRep)}</pre>
       <div class="form-actions">
         <button class="btn-secondary" onclick="copyReport('proj')">📋 העתקה</button>
+        <button class="btn-secondary" onclick="pdfReport('proj')">📄 PDF</button>
+        <button class="btn-secondary" onclick="xlsxReport('proj')">📊 אקסל</button>
         <button class="btn-primary" onclick="waReport('proj')">💬 שליחה בוואטסאפ</button>
       </div>
     </div>
@@ -1923,6 +1994,8 @@ function renderReports(){
         <pre class="report-preview">${esc(persRep)}</pre>
         <div class="form-actions">
           <button class="btn-secondary" onclick="copyReport('person')">📋 העתקה</button>
+        <button class="btn-secondary" onclick="pdfReport('person')">📄 PDF</button>
+        <button class="btn-secondary" onclick="xlsxReport('person')">📊 אקסל</button>
           <button class="btn-primary" onclick="waReport('person')">💬 שליחה בוואטסאפ</button>
         </div>`:''}
     </div>`;
