@@ -146,6 +146,12 @@ main { padding: 14px 14px 150px; max-width: 760px; margin: 0 auto; }  /* מרו�
 .wl-st-note { font-size: 12px; color: #555B69; flex: 1; min-width: 0; }
 .wl-st-note a { color: #2A6FDB; font-weight: 700; cursor: pointer; }
 .wl-st.no .wl-st-note { color: #B23A3A; font-weight: 700; }
+.al-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; background: #FAF9F4; margin-bottom: 6px; }
+.al-row.red { background: #FDECEC; border: 1.5px solid #D64545; }
+.al-name { font-weight: 800; min-width: 64px; }
+.al-n { flex: 1; font-size: 13px; font-weight: 700; display: flex; flex-direction: column; }
+.al-n small { font-size: 11px; color: #8A8F9C; font-weight: 500; }
+.al-btns { display: flex; gap: 5px; flex-shrink: 0; }
 .photo-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
 .photo-thumb { position: relative; }
 .photo-thumb img { width: 64px; height: 64px; object-fit: cover; border-radius: 10px; border: 1px solid #E2DFD5; }
@@ -304,6 +310,18 @@ const PHOTOS = db.collection('vas');
 // נוכחות מהכרטיס הראשי — במסמך נפרד, כדי ששמירה של מסמך המשימות ממכשיר אחר לא תמחק רישומים
 const CHECKINS_DOC = db.collection('vas').doc('checkins');
 let CHECKINS = [], unsubCheckins = null;
+// התרעות נוכחות — נכתב ע"י סקריפט המיילים (tools/attendance-alerts.gs) ומהאפליקציה (פטור / איפוס)
+const ALERTS_DOC = db.collection('vas').doc('alerts');
+let ALERTS = {}, unsubAlerts = null;
+function alertsSave(mut){
+  return db.runTransaction(async tx => {
+    const snap = await tx.get(ALERTS_DOC);
+    let a = {}; try { a = snap.exists && snap.data().data ? JSON.parse(snap.data().data) : {}; } catch(e){}
+    mut(a); a.updated = new Date().toISOString();
+    tx.set(ALERTS_DOC, { data: JSON.stringify(a) });
+  }).catch(e => { console.error(e); toastMsg('שגיאה בשמירה'); });
+}
+function strikesOf(name){ return ((ALERTS.strikes||{})[name] || []).filter(x => daysSince(x.d) < 30); }
 function allCheckins(){
   const seen = new Set(), out = [];
   [...((S && S.checkins) || []), ...CHECKINS].forEach(c => { if (c && c.id && !seen.has(c.id)){ seen.add(c.id); out.push(c); } });
@@ -766,6 +784,7 @@ auth.onAuthStateChanged(u => {
   } else {
     if (unsubData){ unsubData(); unsubData = null; }
     if (unsubCheckins){ unsubCheckins(); unsubCheckins = null; } CHECKINS = [];
+    if (unsubAlerts){ unsubAlerts(); unsubAlerts = null; } ALERTS = {};
     if (unsubLeads){ unsubLeads(); unsubLeads = null; }
     stopWlogSync();
     LEADS = [];
@@ -783,6 +802,10 @@ function startData(){
     LEADS.sort((a,b)=>['דחוף','גבוה','בינוני','רגיל'].indexOf(a.urgency||'רגיל') - ['דחוף','גבוה','בינוני','רגיל'].indexOf(b.urgency||'רגיל'));
     if (S) render();
   }, () => {});
+  unsubAlerts = ALERTS_DOC.onSnapshot(snap => {
+    try { ALERTS = snap.exists && snap.data().data ? JSON.parse(snap.data().data) : {}; } catch(e){ ALERTS = {}; }
+    if (S) render();
+  }, e => console.warn('alerts:', e.code));
   unsubCheckins = CHECKINS_DOC.onSnapshot(snap => {
     CHECKINS = (snap.exists && snap.data().list) || [];
     if (S) render();
@@ -1184,6 +1207,45 @@ function xlsxReport(kind){
   downloadXlsx(aoa, (REPORT_TITLES[kind]||'דוח').slice(0,28), 'vas-' + kind + '-' + today() + '.xlsx');
 }
 function linkify(html){ return html.replace(/https:\/\/maps\.google\.com\/\?q=([\d.\-]+),([\d.\-]+)/g, (m)=>`<a href="${m}" target="_blank" style="color:#2A6FDB;font-weight:800;text-decoration:underline">פתח במפה</a>`); }
+function alertBanner(){
+  if (READONLY || !USER || isHoursAdmin()) return '';
+  const st = strikesOf(USER); if (!st.length) return '';
+  const red = (ALERTS.red||{})[USER];
+  if (red && daysSince(red.d) < 7) return `<div class="card" style="background:#FDECEC;border:2px solid #D64545;color:#B23A3A">
+    <div style="font-weight:900;font-size:16px">🔴 חריגה בדיווח נוכחות — הועבר להנהלה</div>
+    <div style="font-weight:600;margin-top:4px">${st.length} התרעות ב-30 הימים האחרונים על אי-סימון כניסה/יציאה. זה לא תקין — יש לסמן "התחלת יום עבודה" עד 08:30 ו"סיום יום עבודה" בסוף כל יום.</div></div>`;
+  const left = 3 - (st.length % 3);
+  return `<div class="card" style="background:#FFF7E6;border:1.5px solid #E08A2E;color:#8A5A12;font-weight:700">⚠️ יש לך ${st.length % 3 || 3} התרעות על אי-דיווח נוכחות. עוד ${left} והנושא עובר להנהלה.</div>`;
+}
+function alertsAdminCard(){
+  const team = (S.team||[]).filter(m => !/מנהל/.test(m.role||'') && m.kind !== 'קבלן' && !/קבלן/.test(m.role||''));
+  const ex = (ALERTS.exempt||{})[today()] || {};
+  const rows = team.map(m => ({ m, st: strikesOf(m.name), red: (ALERTS.red||{})[m.name] }));
+  const noEmail = team.filter(m => !m.email);
+  const anyAlerts = rows.some(r => r.st.length);
+  return `<div class="card">
+    <div class="card-title">🔔 התרעות נוכחות במייל (30 יום)</div>
+    <div class="settings-sub" style="margin:-4px 0 8px">08:30 — מי שלא סימן כניסה · 18:00 — מי שלא סימן יציאה · כל ${3} התרעות → מייל אדום עם העתק אליך ולהילה${ALERTS.updated?'':' · <b style="color:#B23A3A">הסקריפט עוד לא רץ</b>'}</div>
+    ${rows.map(r => `<div class="al-row${r.red && daysSince(r.red.d) < 7 ? ' red' : ''}">
+      <span class="al-name">${esc(r.m.name)}</span>
+      <span class="al-n">${r.st.length ? (r.red && daysSince(r.red.d) < 7 ? '🔴 ' : '⚠️ ') + r.st.length + ' התרעות' : '<span style="color:#3E8E5A">✓ תקין</span>'}${r.st.length ? `<small>${r.st.slice(-3).map(x => fmtDate(x.d).slice(0,5) + ' ' + (x.type==='in'?'כניסה':'יציאה')).join(' · ')}</small>` : ''}</span>
+      <span class="al-btns">
+        <button class="btn-tiny${ex[r.m.name]?' ok':''}" onclick="alertExempt('${esc(r.m.name)}')">${ex[r.m.name]?'✓ פטור היום':'פטור היום'}</button>
+        ${r.st.length?`<button class="btn-tiny" onclick="alertReset('${esc(r.m.name)}')">איפוס</button>`:''}
+      </span></div>`).join('')}
+    ${noEmail.length ? `<div class="settings-sub" style="color:#B23A3A;margin-top:6px">⚠️ בלי מייל בצוות (לא יקבלו התרעה): ${noEmail.map(m=>esc(m.name)).join(', ')}</div>` : ''}
+  </div>`;
+}
+function alertExempt(name){
+  const d = today();
+  alertsSave(a => { a.exempt = a.exempt || {}; a.exempt[d] = a.exempt[d] || {}; if (a.exempt[d][name]) delete a.exempt[d][name]; else a.exempt[d][name] = true; });
+  pushLog('פטור מהתרעת נוכחות היום: ' + name);
+}
+function alertReset(name){
+  if (!confirm('לאפס את ההתרעות של ' + name + '?')) return;
+  alertsSave(a => { if (a.strikes) delete a.strikes[name]; if (a.red) delete a.red[name]; });
+  pushLog('איפס התרעות נוכחות: ' + name);
+}
 function dayStartNag(){
   if (READONLY || !USER || isHoursAdmin() || window._dayNagShown) return;
   if (new Date().getDay() === 6) return; // שבת
@@ -1257,7 +1319,9 @@ function renderHome(){
 
   return `
     ${openLeadsHtml}
+    ${alertBanner()}
     ${ciHtml}
+    ${isHoursAdmin() ? alertsAdminCard() : ''}
     ${(()=>{
       const stale = staleItems();
       const bills = billPending();
