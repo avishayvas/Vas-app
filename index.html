@@ -133,6 +133,19 @@ main { padding: 14px 14px 150px; max-width: 760px; margin: 0 auto; }  /* מרו�
 .bill-sub { font-size: 11.5px; color: #8A8F9C; margin-top: 2px; }
 .bill-btns { display: flex; gap: 6px; flex-shrink: 0; }
 .arch-month { font-size: 12px; font-weight: 800; color: #C9962E; margin: 12px 0 2px; border-bottom: 1px solid #EFE6CF; padding-bottom: 3px; }
+.wl-daynav { display: flex; align-items: center; gap: 4px; }
+.wl-daynav input { padding: 4px 6px; border: 1.5px solid #E2DFD5; border-radius: 8px; font-family: inherit; font-size: 13px; }
+.wl-st-sum { display: flex; gap: 8px; flex-wrap: wrap; margin: 2px 0 8px; font-size: 12.5px; font-weight: 800; }
+.wl-st-sum span { padding: 4px 10px; border-radius: 20px; }
+.wl-st-sum .ok { background: #EAF5EC; color: #2C6E48; } .wl-st-sum .no { background: #FDECEC; color: #B23A3A; } .wl-st-sum .crew { background: #EEF3FA; color: #2B4E77; }
+.wl-st { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; margin-bottom: 6px; cursor: pointer; }
+.wl-st.ok { background: #F3FAF4; } .wl-st.no { background: #FFF3F3; } .wl-st.crew { background: #F3F7FC; }
+.wl-st-ic { flex: 0 0 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 13px; color: #fff; }
+.wl-st.ok .wl-st-ic { background: #3E8E5A; } .wl-st.no .wl-st-ic { background: #D64545; } .wl-st.crew .wl-st-ic { background: #3B6EA5; font-size: 12px; }
+.wl-st-name { font-weight: 800; font-size: 14px; flex: 0 0 auto; }
+.wl-st-note { font-size: 12px; color: #555B69; flex: 1; min-width: 0; }
+.wl-st-note a { color: #2A6FDB; font-weight: 700; cursor: pointer; }
+.wl-st.no .wl-st-note { color: #B23A3A; font-weight: 700; }
 .photo-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
 .photo-thumb { position: relative; }
 .photo-thumb img { width: 64px; height: 64px; object-fit: cover; border-radius: 10px; border: 1px solid #E2DFD5; }
@@ -3162,7 +3175,7 @@ const WL_ADMIN_EMAILS = ['avishay@s-vsecurity.com','office@s-vsecurity.com'];
 const WL_UNITS = ["יח'","מ'","נק'","קומפ'","שעות","ימים"];
 const WL_FIRST_NUMBER = 1;
 const wlAdmin = () => !!authUser && WL_ADMIN_EMAILS.includes((authUser.email||'').toLowerCase());
-let WLOGS = [], unsubWL = null, WF = null, wlShowAll = false;
+let WLOGS = [], unsubWL = null, WF = null, wlShowAll = true, WL_ERR = '', wlDay = '';
 let wlFrom = '', wlTo = '';
 
 function startWlogSync(){
@@ -3170,8 +3183,9 @@ function startWlogSync(){
   const q = wlAdmin() ? WL_COL : WL_COL.where('createdBy','==',authUser.uid);
   unsubWL = q.onSnapshot(qs => {
     WLOGS = qs.docs.map(d=>d.data()).sort((a,b)=>(b.date+(b.createdAt||'')).localeCompare(a.date+(a.createdAt||'')));
+    WL_ERR = '';
     if (S && tab==='wlog') render();
-  }, e => { console.warn('worklogs:', e.code); });
+  }, e => { console.warn('worklogs:', e.code); WL_ERR = e.code || 'error'; if (S && tab==='wlog') render(); });
   WL_SITES.get().then(qs => { WLSITES = qs.docs.map(d=>d.data()); }).catch(()=>{});
 }
 let WLSITES = [];
@@ -3198,6 +3212,8 @@ function renderWlog(){
       </div>
       ${todays.length?`<div class="settings-sub" style="margin-top:8px">היום דווחו ${todays.length} יומנים${wlAdmin()?' · '+esc(todays.map(l=>l.createdByName).join(', ')):''}</div>`:''}
     </div>
+    ${WL_ERR?`<div class="card" style="border:1.5px solid #F0C6C6;background:#FFF8F8;color:#B23A3A;font-weight:700">⚠️ לא ניתן לטעון יומנים${WL_ERR==='permission-denied'?' — חוקי הגישה ב-Firebase חוסמים קריאה של יומני הצוות':' — בדקו חיבור'}</div>`:''}
+    ${wlAdmin()?wlDayStatusCard():''}
     ${wlAdmin()?`<div class="card" style="padding-bottom:6px">
       <div class="wl-tabs">
         <button class="btn-tiny${wlShowAll?'':' wl-on'}" onclick="wlShowAll=false;render()">היומנים שלי</button>
@@ -3208,6 +3224,40 @@ function renderWlog(){
       <div class="card-title">יומנים אחרונים (${mine.length})</div>
       ${mine.length ? mine.slice(0,60).map(wlogCard).join('') : '<div class="empty">אין יומנים להצגה</div>'}
     </div>`;
+}
+/* מי רשם יומן ביום נתון ומי לא */
+function wlDayStatusCard(){
+  if (!wlDay) wlDay = today();
+  const d = wlDay;
+  const logs = WLOGS.filter(l => l.date === d);
+  const expected = (S.team||[]).filter(m => !/מנהל/.test(m.role||'') && m.kind !== 'קבלן' && !/קבלן/.test(m.role||''));
+  const wrote = {}, inCrew = {};
+  logs.forEach(l => {
+    const n = l.createdByName || '';
+    (wrote[n] = wrote[n] || []).push(l);
+    (l.crew||[]).forEach(c => { if (c.name && c.name !== n) (inCrew[c.name] = inCrew[c.name] || []).push(l); });
+  });
+  const yes = expected.filter(m => wrote[m.name]);
+  const crew = expected.filter(m => !wrote[m.name] && inCrew[m.name]);
+  const no = expected.filter(m => !wrote[m.name] && !inCrew[m.name]);
+  const others = Object.keys(wrote).filter(n => !expected.some(m => m.name === n));
+  const isToday = d === today();
+  const row = (name, list, cls, note) => `<div class="wl-st ${cls}"${list&&list.length===1?` onclick="openWlogView('${list[0].id}')"`:''}>
+      <span class="wl-st-ic">${cls==='ok'?'✓':cls==='crew'?'👥':'✗'}</span>
+      <span class="wl-st-name">${esc(name)}</span>
+      <span class="wl-st-note">${note}</span></div>`;
+  const logNote = list => list.map(l => `<a onclick="event.stopPropagation();openWlogView('${l.id}')">${esc(wlSiteName(l))} · ${wlTotal(l)} ש'</a>`).join(' · ');
+  return `<div class="card">
+    <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+      <span>📋 מי רשם יומן</span>
+      <span class="wl-daynav"><button class="btn-tiny" onclick="wlDay=addDays(wlDay,-1);render()">▶</button><input type="date" value="${esc(d)}" onchange="wlDay=this.value||today();render()"><button class="btn-tiny" onclick="wlDay=addDays(wlDay,1);render()"${isToday?' disabled':''}>◀</button></span>
+    </div>
+    <div class="wl-st-sum"><span class="ok">✓ ${yes.length} רשמו</span>${crew.length?`<span class="crew">👥 ${crew.length} בצוות של אחר</span>`:''}<span class="no">✗ ${no.length} לא רשמו</span></div>
+    ${no.map(m => row(m.name, null, 'no', isToday ? 'עוד לא רשם היום' : 'לא רשם')).join('')}
+    ${yes.map(m => row(m.name, wrote[m.name], 'ok', logNote(wrote[m.name]))).join('')}
+    ${crew.map(m => row(m.name, inCrew[m.name], 'crew', 'נרשם ע״י ' + esc([...new Set(inCrew[m.name].map(l=>l.createdByName))].join(', ')))).join('')}
+    ${others.map(n => row(n, wrote[n], 'ok', logNote(wrote[n]))).join('')}
+  </div>`;
 }
 function wlogCard(l){
   const lines = (l.work||[]).length;
