@@ -42,6 +42,16 @@ main { padding: 14px 14px 150px; max-width: 760px; margin: 0 auto; }  /* מרו�
 .kpi { background: #fff; border-radius: 12px; padding: 12px 14px; border-inline-start: 5px solid #ccc; box-shadow: 0 1px 3px rgba(27,31,42,.07); }
 .kpi-value { font-size: 28px; font-weight: 800; line-height: 1; }
 .kpi-label { font-size: 12px; color: #6B7080; margin-top: 4px; font-weight: 500; }
+.kpi-sub { font-size: 11px; font-weight: 800; margin-top: 3px; }
+.kpi-alert { background: #FDF1F1; animation: kpiPulse 2s ease-in-out infinite; }
+@keyframes kpiPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(214,69,69,.0); } 50% { box-shadow: 0 0 0 4px rgba(214,69,69,.22); } }
+.stale-card { border: 1.5px solid #F0C6C6; background: #FFF8F8; }
+.stale-row { display: flex; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid #F3DCDC; cursor: pointer; }
+.stale-row:first-of-type { border-top: none; }
+.stale-days { flex: 0 0 46px; height: 46px; border-radius: 10px; background: #D64545; color: #fff; font-weight: 900; font-size: 18px; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; }
+.stale-days small { font-size: 10px; font-weight: 600; margin-top: 2px; }
+.stale-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 13px; }
+.stale-body span { font-size: 12px; color: #8A5050; }
 
 .card { background: #fff; border-radius: 12px; padding: 14px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(27,31,42,.07); }
 .card-title { font-weight: 700; font-size: 15px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
@@ -1163,12 +1173,27 @@ function renderHome(){
   return `
     ${openLeadsHtml}
     ${ciHtml}
-    <div class="kpi-grid">
-      ${kpi('משימות פתוחות', open.length, '#D64545', 'open')}
-      ${kpi('דחופות', urgent.length, '#E08A2E', 'urgent')}
-      ${kpi('באיחור', overdue.length, '#8E44AD', 'overdue')}
-      ${kpi('ממתינות לאישור', waiting.length, '#3B6EA5', 'waiting')}
-    </div>
+    ${(()=>{
+      const stale = staleItems();
+      const bills = billPending();
+      return `<div class="kpi-grid">
+        ${kpi('משימות פתוחות', open.length, '#3B6EA5', 'open', urgent.length ? urgent.length + ' דחופות' : '')}
+        ${kpi('קריאות שירות פתוחות', openCalls.length, '#E08A2E', 'calls', openCalls.filter(c=>c.urgency==='דחוף').length ? openCalls.filter(c=>c.urgency==='דחוף').length + ' דחופות' : '')}
+        ${isAdmin() ? kpi('נסגרו — ממתינות לחיוב', bills.length, '#C9962E', 'bill', bills.length ? 'להוציא חשבונית' : '') : kpi('ממתינות לאישור', waiting.length, '#C9962E', 'waiting')}
+        <div class="kpi${stale.length?' kpi-alert':''}" style="border-inline-start-color:${stale.length?'#D64545':'#3E8E5A'};cursor:pointer" onclick="kpiGo('stale')">
+          <div class="kpi-value" style="color:${stale.length?'#D64545':'#3E8E5A'}">${stale.length ? '⚠️ ' + stale.length : '✓ 0'}</div>
+          <div class="kpi-label">${stale.length ? 'באיחור — מעל ' + STALE_DAYS + ' ימים' : 'אין חריגות'}</div>
+        </div>
+      </div>
+      ${stale.length ? `<div class="card stale-card" id="staleCard">
+        <div class="card-title" style="color:#B23A3A">⚠️ חורגים — ${STALE_DAYS} ימים ומעלה בלי מענה (${stale.length})</div>
+        ${stale.slice(0, 10).map(x=>`<div class="stale-row" onclick="${x.kind==='task'?`openTaskForm('${x.id}')`:`openCallForm('${x.id}')`}">
+          <span class="stale-days">${x.days}<small>ימים</small></span>
+          <span class="stale-body"><b>${x.kind==='task'?'📋':'🛠️'} ${esc(x.label)}</b><span>${esc(x.why)}${x.who?' · 👷 '+esc(x.who):' · לא שובץ'}</span></span>
+        </div>`).join('')}
+        ${stale.length > 10 ? `<div class="settings-sub" style="margin-top:6px">ועוד ${stale.length - 10}…</div>` : ''}
+      </div>` : ''}`;
+    })()}
     ${isAdmin() ? pendingCard() : ''}
     ${myDayCard()}
     <div class="card">
@@ -1240,7 +1265,7 @@ function renderHome(){
       ];
       if (!bills.length) return '';
       bills.sort((a,b)=>(b.d||'').localeCompare(a.d||''));
-      return `<div class="card"><div class="card-title" style="color:#C9962E">💳 ממתינות לחיוב (${bills.length}) ${helpBtn('billing')}</div>` + bills.slice(0,6).map(b=>`
+      return `<div class="card" id="billCard"><div class="card-title" style="color:#C9962E">💳 ממתינות לחיוב (${bills.length}) ${helpBtn('billing')}</div>` + bills.slice(0,6).map(b=>`
         <div class="mini-task tappable" onclick="${b.kind==='task'?'openTaskForm':'openCallForm'}('${b.id}')"><span class="dot" style="background:#C9962E"></span>
         <div style="flex:1"><div class="mini-task-title">${esc(b.cust)} — ${esc(b.what)}</div>
         <div class="mini-task-sub">${esc(b.by)} · ${fmtDate(b.d)}</div>
@@ -1273,8 +1298,31 @@ function myDayCard(){
       <div class="mini-task-sub">${r.cont?`⏸️ חזרה: ${fmtDate(r.cont)}${r.cont<today()?' ⚠️':''}`:r.due?`📅 יעד: ${fmtDate(r.due)}${r.due<today()?' ⚠️ באיחור':''}`:esc(r.urg)}</div></div>
     </div>`).join('') + (rows.length>6?`<div class="settings-sub" style="text-align:center;margin-top:4px">ועוד ${rows.length-6}…</div>`:'') + `</div>`;
 }
-const kpi = (label,value,color,go)=>`<div class="kpi" style="border-inline-start-color:${color};cursor:pointer" onclick="kpiGo('${go}')"><div class="kpi-value" style="color:${color}">${value}</div><div class="kpi-label">${label}</div></div>`;
+const kpi = (label,value,color,go,sub)=>`<div class="kpi" style="border-inline-start-color:${color};cursor:pointer" onclick="kpiGo('${go}')"><div class="kpi-value" style="color:${color}">${value}</div><div class="kpi-label">${label}</div>${sub?`<div class="kpi-sub" style="color:${color}">${sub}</div>`:''}</div>`;
+const STALE_DAYS = 3;
+const daysSince = d => d ? Math.floor((new Date(today() + 'T12:00:00') - new Date(d + 'T12:00:00')) / 86400000) : 0;
+/* פריט פתוח שלא נגעו בו STALE_DAYS ימים, או משימה שעבר תאריך היעד שלה */
+function staleItems(){
+  const lastTouch = x => [x.updatedAt, x.created, ...((x.presence||[]).map(p=>p.d))].filter(Boolean).sort().pop() || '';
+  const out = [];
+  S.tasks.filter(t=>!['בוצע','אושר'].includes(t.status)).forEach(t => {
+    const lt = lastTouch(t), d = daysSince(lt);
+    if (isOverdue(t)) out.push({ kind:'task', id:t.id, label:t.title + ' · ' + projName(t.projectId), days: daysSince(t.due), why:'עבר תאריך היעד ' + fmtDate(t.due), who:t.assignee });
+    else if (lt && d >= STALE_DAYS) out.push({ kind:'task', id:t.id, label:t.title + ' · ' + projName(t.projectId), days:d, why:'סטטוס "' + t.status + '" בלי עדכון', who:t.assignee });
+  });
+  S.calls.filter(c=>c.status!=='נסגרה').forEach(c => {
+    const lt = lastTouch(c), d = daysSince(lt);
+    if (c.status === 'המשך טיפול' && c.contDate && c.contDate >= today()) return;
+    if (lt && d >= STALE_DAYS) out.push({ kind:'call', id:c.id, label:c.customer, days:d, why: c.status==='חדשה' ? 'קריאה חדשה שלא טופלה' : 'סטטוס "' + c.status + '" בלי עדכון', who:c.technician });
+  });
+  return out.sort((a,b)=>b.days-a.days);
+}
+function billPending(){
+  return [...S.tasks.filter(t=>['בוצע','אושר'].includes(t.status) && !t.billing), ...S.calls.filter(c=>c.status==='נסגרה' && !c.billing)];
+}
 function kpiGo(kind){
+  if (kind === 'stale' || kind === 'bill'){ const el = document.getElementById(kind==='stale'?'staleCard':'billCard'); if (el) el.scrollIntoView({ behavior:'smooth', block:'start' }); return; }
+  if (kind === 'calls'){ callsShowClosed = false; callSearch = ''; goTab('calls'); return; }
   filters.proj = 'all'; filters.assignee = 'all';
   filters.status = kind === 'waiting' ? 'בוצע' : 'open';
   filters.special = (kind === 'urgent' || kind === 'overdue') ? kind : null;
