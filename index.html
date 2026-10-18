@@ -525,7 +525,7 @@ const mapLink = c => c && c.lat ? `https://maps.google.com/?q=${c.lat},${c.lng}`
 function buildWorkdayReport(from, to, person){
   if (!isHoursAdmin()) return 'דוח ימי עבודה זמין לאבישי והילה בלבד';
   const rows = workdays(from, to, person);
-  let msg = `*דוח ימי עבודה — התחלה וסיום*\n📅 ${fmtDate(from)} — ${fmtDate(to)}${person ? '\n👷 ' + person : ''}\n`;
+  let msg = `*דוח נוכחות ושעות — התחלה וסיום יום*\n📅 ${fmtDate(from)} — ${fmtDate(to)}${person ? '\n👷 ' + person : ''}\n`;
   if (!rows.length) return msg + '\nאין סימוני התחלה/סיום יום בתקופה זו';
   let cur = '', tot = 0, days = 0;
   const close = () => { if (cur) msg += `   *סה"כ: ${days} ימים · ${fmtDur(tot)} שעות*\n`; };
@@ -1580,7 +1580,7 @@ function renderReports(){
     </div>
     ${isHoursAdmin()?`
     <div class="card">
-      <div class="card-title">🕒 דוח ימי עבודה — התחלה וסיום ${helpBtn('workday')}</div>
+      <div class="card-title">📍 דוח נוכחות ושעות — התחלה וסיום יום ${helpBtn('workday')}</div>
       <div class="form-2col">
         <div><label style="display:block;font-size:12px;font-weight:700;color:#555B69;margin-bottom:4px">מתאריך</label><input type="date" value="${esc(wdFrom)}" onchange="wdFrom=this.value;render()"></div>
         <div><label style="display:block;font-size:12px;font-weight:700;color:#555B69;margin-bottom:4px">עד תאריך</label><input type="date" value="${esc(wdTo)}" onchange="wdTo=this.value;render()"></div>
@@ -1598,7 +1598,7 @@ function renderReports(){
       </div>
     </div>
     <div class="card">
-      <div class="card-title">📍 נוכחות באתרים (לפי משימות וקריאות) ${helpBtn('presence')}</div>
+      <div class="card-title">🏗️ נוכחות באתרים (לפי משימות וקריאות) ${helpBtn('presence')}</div>
       <div class="form-2col">
         <div><label style="display:block;font-size:12px;font-weight:700;color:#555B69;margin-bottom:4px">מתאריך</label><input type="date" value="${esc(presFrom)}" onchange="presFrom=this.value;render()"></div>
         <div><label style="display:block;font-size:12px;font-weight:700;color:#555B69;margin-bottom:4px">עד תאריך</label><input type="date" value="${esc(presTo)}" onchange="presTo=this.value;render()"></div>
