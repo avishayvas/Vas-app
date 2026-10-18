@@ -1822,6 +1822,16 @@ function buildPersonReport(person){
   msg += '\n\nבהצלחה! 💪';
   return msg;
 }
+/* תמצית קצרה לקריאה: "מצלמות · תיקון תקלה" במקום כל התיאור */
+const TOPIC_SHORT = { 'מצלמות אבטחה':'מצלמות', 'אזעקה / פריצה':'אזעקה', 'בקרת כניסה / דלתות':'בקרת כניסה', 'תקשורת / אינטרנט':'תקשורת' };
+function shortText(t, max){ t = String(t||'').replace(/\s+/g,' ').trim(); return t.length > max ? t.slice(0, max-1).trim() + '…' : t; }
+function callShort(c){
+  if (c.topic) return (TOPIC_SHORT[c.topic] || c.topic) + (c.action ? ' · ' + c.action : '');
+  const first = String(c.desc||'').split('\n')[0].split(/\s+—\s+/)[0];
+  const parts = first.split(/\s+·\s+/).filter(x => !/^כמות/.test(x)).slice(0, 2).map(x => TOPIC_SHORT[x] || x);
+  return shortText(parts.join(' · '), 48);
+}
+const urgFlag = u => u === 'דחוף' ? '🔴' : u === 'גבוה' ? '🟠' : '▫️';
 function buildDailyReport(d){
   const dispD = fmtDate(d);
   const doneT = S.tasks.filter(t => (t.closedAt === d) || (t.updatedAt === d && (t.status === 'בוצע' || t.status === 'אושר')));
@@ -1838,30 +1848,27 @@ function buildDailyReport(d){
   msg += `\n✅ *בוצע היום (${doneT.length + doneC.length}):*\n`;
   if (!doneT.length && !doneC.length) msg += `— אין סגירות היום\n`;
   doneT.forEach(t => {
-    msg += `🔹 ${projName(t.projectId)} — ${t.title}`;
-    if (t.report) msg += ` | ${t.report}`;
-    if (t.qty) msg += ` (${t.qty})`;
-    if (t.updatedBy) msg += ` — ${t.updatedBy}`;
+    msg += `🔹 ${projName(t.projectId)} — ${shortText(t.title, 48)}`;
+    if (t.closedBy || t.updatedBy) msg += ` · ${t.closedBy || t.updatedBy}`;
     msg += `\n`;
   });
   const durs = doneC.map(c => minutesBetween(c.created, c.createdTime, c.closedAt, c.closedTime)).filter(x => x != null);
   if (durs.length) msg += `⏱️ זמן תגובה ממוצע לקריאות שנסגרו: ${fmtAge(Math.round(durs.reduce((s,x)=>s+x,0) / durs.length))}\n`;
   doneC.forEach(c => {
-    msg += `🛠️ קריאה: ${c.customer} — ${c.desc}`;
-    if (c.report) msg += ` | ${c.report}`;
-    if (c.closedBy || c.updatedBy) msg += ` — ${c.closedBy || c.updatedBy}`;
+    msg += `🛠️ ${c.customer} — ${callShort(c)}`;
+    if (c.closedBy || c.updatedBy) msg += ` · ${c.closedBy || c.updatedBy}`;
     msg += `\n`;
   });
 
   const contItems = [
     ...S.tasks.filter(t => t.status === 'המשך טיפול' && t.updatedAt === d).map(t => ({ what: projName(t.projectId) + ' — ' + t.title, rep: t.report, by: t.updatedBy, cd: t.contDate })),
-    ...S.calls.filter(c => c.status === 'המשך טיפול' && c.updatedAt === d).map(c => ({ what: c.customer + ' — ' + c.desc, rep: c.report, by: c.updatedBy, cd: c.contDate }))
+    ...S.calls.filter(c => c.status === 'המשך טיפול' && c.updatedAt === d).map(c => ({ what: c.customer + ' — ' + callShort(c), rep: c.report, by: c.updatedBy, cd: c.contDate }))
   ];
   if (contItems.length){
     msg += `\n⏸️ *הופסק להמשך טיפול (${contItems.length}):*\n`;
     contItems.forEach(i => {
       msg += `▫️ ${i.what}`;
-      if (i.rep) msg += ` | בוצע עד כה: ${i.rep}`;
+
       if (i.cd) msg += ` · חזרה: ${fmtDate(i.cd)}`;
       if (i.by) msg += ` — ${i.by}`;
       msg += `\n`;
@@ -1875,12 +1882,13 @@ function buildDailyReport(d){
     msg += `📁 *${proj}:*\n`;
     arr.forEach(t => {
       const flag = t.urgency === 'דחוף' ? '🔴' : t.urgency === 'גבוה' ? '🟠' : '▫️';
-      msg += `${flag} ${t.title}${t.location ? ' (' + t.location + ')' : ''} — ${t.status}${t.assignee ? ' · ' + t.assignee : ''}${isOverdue(t) ? ' ⚠️ באיחור' : ''}\n`;
+      msg += `${flag} ${shortText(t.title, 48)} (${t.status}${t.assignee ? ' · ' + t.assignee : ''})${isOverdue(t) ? ' ⚠️ באיחור' : ''}\n`;
     });
   });
   if (openC.length) {
-    msg += `🛠️ *קריאות פתוחות:*\n`;
-    openC.forEach(c => { msg += `▫️ ${c.customer} — ${c.desc} (${c.status})${c.technician ? ' · ' + c.technician : ''}\n`; });
+    const UO = { 'דחוף':0, 'גבוה':1, 'רגיל':2, 'נמוך':3 };
+    msg += `🛠️ *קריאות פתוחות (${openC.length}):*\n`;
+    openC.slice().sort((a,b)=>(UO[a.urgency]??9)-(UO[b.urgency]??9)).forEach(c => { msg += `${urgFlag(c.urgency)} ${c.customer} — ${callShort(c)} (${c.status}${c.technician ? ' · ' + c.technician : ''})\n`; });
   }
 
   const att = allCheckins().filter(c=>c.d===d && (isHoursAdmin() || c.by===USER));
