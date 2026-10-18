@@ -1013,7 +1013,7 @@ function goTab(k){ tab = k; render(); window.scrollTo(0,0); }
 
 /* ==================== Render ==================== */
 /* ==================== דוח קריאות שירות ==================== */
-let crFrom = '', crTo = '', crStatus = 'open', crUrg = '', crClient = '';
+let crFrom = '', crTo = '', crStatus = 'open', crUrg = '', crClient = '', crTech = '';
 function callClientBranch(c){
   if (c.client) return { client: c.client, branch: c.branch || (c.customer !== c.client ? c.customer : '') };
   const cu = (c.customer || '').trim();
@@ -1044,12 +1044,14 @@ function callReportRows(ignoreUrg){
     if (crStatus === 'closed' && c.status !== 'נסגרה') return false;
     if (!ignoreUrg && crUrg && c.urgency !== crUrg) return false;
     if (crClient && callClientBranch(c).client !== crClient) return false;
+    if (crTech === '__mine' && c.technician !== USER) return false;
+    if (crTech === '__none' && c.technician) return false;
+    if (crTech && crTech !== '__mine' && crTech !== '__none' && c.technician !== crTech) return false;
     return true;
   }).map(c => Object.assign({ c, opener: callOpener(c), fault: callFault(c) }, callClientBranch(c)))
     .sort((a,b) => (U[a.c.urgency] ?? 9) - (U[b.c.urgency] ?? 9) || ((b.c.created||'') + (b.c.createdTime||'')).localeCompare((a.c.created||'') + (a.c.createdTime||'')));
 }
 function callsReportCard(){
-  if (!isAdmin()) return '';
   if (!crFrom){ crFrom = addDays(today(), -30); crTo = today(); }
   const rows = callReportRows();
   const base = callReportRows(true);
@@ -1071,6 +1073,11 @@ function callsReportCard(){
       <div><label style="${lab}">לקוח</label><select onchange="crClient=this.value;render()">
         <option value="">כל הלקוחות</option>${clients.map(n=>`<option${crClient===n?' selected':''}>${esc(n)}</option>`).join('')}</select></div>
     </div>
+    <div style="margin-top:8px"><label style="${lab}">טכנאי</label><select onchange="crTech=this.value;render()">
+      <option value="">כל הטכנאים</option>
+      <option value="__mine"${crTech==='__mine'?' selected':''}>👤 רק שלי</option>
+      <option value="__none"${crTech==='__none'?' selected':''}>לא שובצו</option>
+      ${(S.team||[]).filter(m=>!/מנהל/.test(m.role||'')).map(m=>`<option value="${esc(m.name)}"${crTech===m.name?' selected':''}>${esc(m.name)}</option>`).join('')}</select></div>
     <div class="cr-sum">
       <button class="cr-pill${!crUrg?' on':''}" onclick="crUrg='';render()"><b>${base.length}</b>הכול</button>
       ${URGENCIES.map(u=>`<button class="cr-pill${crUrg===u?' on':''}" style="--uc:${URGENCY_COLORS[u]}" onclick="crUrg=crUrg==='${u}'?'':'${u}';render()"><b>${cnt(u)}</b>${u}</button>`).join('')}
@@ -1097,7 +1104,7 @@ function callsReportCard(){
   </div>`;
 }
 function crFilterLine(){
-  return `${fmtDate(crFrom)} — ${fmtDate(crTo)} · ${crStatus==='open'?'פתוחות':crStatus==='closed'?'סגורות':'כל הקריאות'}${crUrg?' · דחיפות: '+crUrg:''}${crClient?' · '+crClient:''}`;
+  return `${fmtDate(crFrom)} — ${fmtDate(crTo)} · ${crStatus==='open'?'פתוחות':crStatus==='closed'?'סגורות':'כל הקריאות'}${crUrg?' · דחיפות: '+crUrg:''}${crClient?' · '+crClient:''}${crTech==='__mine'?' · '+USER:crTech==='__none'?' · לא שובצו':crTech?' · '+crTech:''}`;
 }
 function buildCallsReport(){
   const rows = callReportRows();
@@ -1328,7 +1335,7 @@ function renderHome(){
       return `<div class="kpi-grid">
         ${kpi('משימות פתוחות', open.length, '#3B6EA5', 'open', urgent.length ? urgent.length + ' דחופות' : '')}
         ${kpi('קריאות שירות פתוחות', openCalls.length, '#E08A2E', 'calls', openCalls.filter(c=>c.urgency==='דחוף').length ? openCalls.filter(c=>c.urgency==='דחוף').length + ' דחופות' : '')}
-        ${isAdmin() ? kpi('נסגרו — ממתינות לחיוב', bills.length, '#C9962E', 'bill', bills.length ? 'להוציא חשבונית' : '') : kpi('ממתינות לאישור', waiting.length, '#C9962E', 'waiting')}
+        ${kpi('נסגרו — ממתינות לחיוב', bills.length, '#C9962E', isAdmin() ? 'bill' : 'waiting', bills.length && isAdmin() ? 'להוציא חשבונית' : '')}
         <div class="kpi${stale.length?' kpi-alert':''}" style="border-inline-start-color:${stale.length?'#D64545':'#3E8E5A'};cursor:pointer" onclick="kpiGo('stale')">
           <div class="kpi-value" style="color:${stale.length?'#D64545':'#3E8E5A'}">${stale.length ? '⚠️ ' + stale.length : '✓ 0'}</div>
           <div class="kpi-label">${stale.length ? 'באיחור — מעל ' + STALE_DAYS + ' ימים' : 'אין חריגות'}</div>
