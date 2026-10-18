@@ -334,6 +334,7 @@ let reportProj = '', reportPerson = '', reportDate = '';
 let billFrom = '', billTo = '';
 let stmtCust = '';
 let presFrom = '', presTo = '', presWho = '';
+let wdFrom = '', wdTo = '', wdWho = '';
 let taskSearch = '', callSearch = '';
 const photoCache = {};
 
@@ -451,7 +452,8 @@ const HELP = {
   backup: { t:'גיבוי ושחזור', b:'<b>⬇️ ייצוא גיבוי:</b> מוריד קובץ עם כל הנתונים (בלי תמונות). מומלץ פעם בחודש.<br><br><b>↩️ שחזור אחרון (מנהלים):</b> מחזיר את המערכת למצב שלפני השינוי האחרון — הצלה מהירה אם מישהו דרס משהו בטעות.<br><br><b>⬆️ שחזור מגיבוי (מנהלים):</b> טוען קובץ גיבוי שהורדתם בעבר.' },
   viewlink: { t:'קישור צפייה בלבד', b:'קישור מיוחד לשיתוף עם לקוח או מפקח — הם רואים את כל המשימות והסטטוסים אבל <b>לא יכולים לערוך כלום</b>.<br><br>שימו לב: מרגע שחוקי האבטחה מופעלים, גם צפייה דורשת חשבון — אפשר ליצור משתמש "צופה" ייעודי לזה.' },
   log: { t:'יומן הפעילות', b:'כל פעולה במערכת נרשמת אוטומטית: מי, מה ומתי — פתיחת משימות, עדכוני סטטוס, מחיקות, מכירות, שיוכים.<br><br>גלוי למנהלים בלבד. אי אפשר למחוק או לערוך אותו.' },
-  checkin: { t:'נוכחות — סימון הגעה ועזיבה', b:'<b>📍 סימון הגעה:</b> הגעתם לאתר? לוחצים, בוחרים את האתר, ומאשרים. השעה והמיקום (GPS) נרשמים אוטומטית.<br><br><b>🏁 סימון עזיבה:</b> בסוף העבודה באתר.<br><br>הנתונים נכנסים לדוח היומי — כולל קישור למפה של נקודת הסימון. זה דוח השעות שלכם, אל תשכחו לסמן!' },
+  checkin: { t:'יום עבודה — התחלה וסיום', b:'<b>▶️ התחלת יום עבודה:</b> לוחצים כשמתחילים לעבוד. השעה והמיקום (GPS) נרשמים אוטומטית.<br><br><b>⏹ סיום יום עבודה:</b> לוחצים בסוף היום.<br><br>יצאתם להפסקה ארוכה וחזרתם? אחרי סיום אפשר ללחוץ "חזרה לעבודה" — השעות מחושבות רק על הזמן שעבדתם.<br><br>זה דוח השעות שלכם — אל תשכחו לסמן התחלה וסיום!' },
+  workday: { t:'דוח ימי עבודה', b:'לכל עובד ולכל יום: <b>מתי התחיל</b>, <b>מתי סיים</b> וכמה שעות עבד — לפי הלחיצות במסך הבית.<br><br>⚠️ יום שהתחיל בלי סימון סיום מסומן, כדי להשלים מול העובד.<br><br>באקסל יש גם קישור למפה של מיקום ההתחלה והסיום.<br><br>זה דוח נפרד מ"נוכחות באתרים", שמראה מתי עבדו על כל משימה.' },
   leads: { t:'קריאות מלקוחות', b:'לקוחות יכולים לפתוח קריאת שירות בעצמם דרך קישור ייעודי — בלי סיסמה ובלי גישה למערכת.<br><br>הפניות מגיעות לכאן, ממוינות לפי דחיפות. <b>✔ קליטה כקריאה</b> מכניסה אותן לרשימת הקריאות הרגילה לשיבוץ טכנאי.' },
   team: { t:'ניהול צוות וכניסות', b:'<b>הוספת עובד:</b> ＋ הוספה ← שם ותפקיד.<br><br><b>יצירת כניסה עם סיסמה:</b> לוחצים על העובד ← מזינים את האימייל האישי שלו (עדיף אמיתי, בשביל שחזור סיסמה) ← "🔑 צור כניסה" ← קובעים סיסמה ראשונית ← שולחים לו את הפרטים בוואטסאפ.<br><br>🔑 ליד שם = יש לו כניסה פעילה.<br><br><b>חסימת עובד:</b> דרך Firebase ← Authentication ← Users ← Disable.' },
   presence: { t:'נוכחות ושעות', b:'כשלוחצים <b>"📍 הגעתי לאתר"</b> — נרשמות השעה ונקודת ה-GPS. בסיום — <b>"🏁 סיום עבודה באתר"</b>.<br><br><b>פרטיות:</b> כל עובד רואה על הכרטיסים <b>רק את הרישומים של עצמו</b>. דוח השעות המרוכז — עם חישוב שעות ליום ולתקופה, ואפשרות לדוח פר עובד — זמין לאבישי ולהילה בלבד.<br><br>⚠️ רישום הגעה בלי סימון סיום מסומן בדוח, כדי להשלים ידנית מול העובד.' },
@@ -470,38 +472,92 @@ function getPos(){
       { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 });
   });
 }
-function openCheckIn(){
-  if (!guardEdit()) return;
-  modalShell('📍 סימון הגעה לאתר', `
-    <label>לאיזה אתר הגעת?</label>
-    <select id="ci_site">${siteList().map(s=>`<option>${esc(s)}</option>`).join('')}<option value="__other">אחר…</option></select>
-    <input id="ci_other" placeholder="שם האתר" style="display:none;margin-top:8px">
-    <div class="settings-sub" style="margin-top:10px">📡 בלחיצה על אישור יירשמו השעה והמיקום שלך (GPS). ייתכן שהדפדפן יבקש הרשאת מיקום — אשרו.</div>
-    <div class="form-actions"><button class="btn-primary" onclick="doCheckIn()">📍 אישור הגעה</button></div>`);
-  const sel = document.getElementById('ci_site');
-  if (sel) sel.onchange = e => { const o = document.getElementById('ci_other'); if (o) o.style.display = e.target.value === '__other' ? '' : 'none'; };
+function wdOpenToday(){
+  const mine = allCheckins().filter(c=>c.by===USER && c.d===today());
+  const last = mine[mine.length-1];
+  return last && last.type==='in' ? last : null;
 }
-async function doCheckIn(){
-  const sel = document.getElementById('ci_site');
-  let site = sel && sel.value === '__other' ? (document.getElementById('ci_other')||{value:''}).value.trim() : (sel?sel.value:'');
-  if (!site){ toastMsg('בחרו אתר'); return; }
+async function openCheckIn(){
+  if (!guardEdit()) return;
+  if (wdOpenToday()){ toastMsg('יום העבודה כבר התחיל'); render(); return; }
   toastMsg('📡 מאתר מיקום…');
   const pos = await getPos();
-  await saveCheckin(Object.assign({ id: uid(), type:'in', by:USER, d:today(), t:nowTime(), site, noGps: !pos }, pos || {}));
-  pushLog('📍 סימן הגעה: ' + site + (pos ? '' : ' (ללא מיקום)'));
-  await persist(); closeModal(); render();
-  toastMsg(pos ? '📍 ההגעה נרשמה עם מיקום ✓' : 'ההגעה נרשמה — ללא GPS (אין הרשאת מיקום)');
+  if (wdOpenToday()){ render(); return; }
+  await saveCheckin(Object.assign({ id: uid(), kind:'day', type:'in', by:USER, d:today(), t:nowTime(), site:'', noGps: !pos }, pos || {}));
+  pushLog('▶️ התחיל יום עבודה' + (pos ? '' : ' (ללא מיקום)'));
+  render();
+  toastMsg(pos ? '▶️ יום העבודה התחיל ✓' : '▶️ יום העבודה התחיל — ללא GPS (אין הרשאת מיקום)');
 }
 async function checkOut(){
   if (!guardEdit()) return;
+  const open = wdOpenToday();
+  if (!open){ toastMsg('לא סומנה התחלת יום'); render(); return; }
+  if (!confirm('לסיים את יום העבודה?')) return;
   toastMsg('📡 מאתר מיקום…');
   const pos = await getPos();
-  const mine = allCheckins().filter(c=>c.by===USER && c.d===today() && c.type==='in');
-  const site = mine.length ? mine[mine.length-1].site : '';
-  await saveCheckin(Object.assign({ id: uid(), type:'out', by:USER, d:today(), t:nowTime(), site, noGps: !pos }, pos || {}));
-  pushLog('🏁 סימן עזיבה' + (site ? ': ' + site : '') + (pos ? '' : ' (ללא מיקום)'));
-  await persist(); render();
-  toastMsg('🏁 העזיבה נרשמה ✓');
+  await saveCheckin(Object.assign({ id: uid(), kind:'day', type:'out', by:USER, d:today(), t:nowTime(), site: open.site||'', noGps: !pos }, pos || {}));
+  pushLog('⏹ סיים יום עבודה' + (pos ? '' : ' (ללא מיקום)'));
+  render();
+  toastMsg('⏹ יום העבודה הסתיים ✓');
+}
+/* ימי עבודה: התחלה וסיום לכל עובד לכל יום */
+function workdays(from, to, person){
+  const by = {};
+  allCheckins().forEach(c => {
+    if (!c.d || c.d < from || c.d > to || (person && c.by !== person)) return;
+    const k = c.by + '|' + c.d;
+    (by[k] = by[k] || { who:c.by, d:c.d, ev:[] }).ev.push(c);
+  });
+  return Object.values(by).map(day => {
+    day.ev.sort((a,b)=>(a.t||'').localeCompare(b.t||''));
+    let open = null, mins = 0, missingEnd = false, missingStart = false;
+    day.ev.forEach(e => {
+      if (e.type === 'in'){ if (open) missingEnd = true; open = e; }
+      else if (open){ mins += Math.max(0, toMins(e.t) - toMins(open.t)); open = null; }
+      else missingStart = true;
+    });
+    const ins = day.ev.filter(e=>e.type==='in'), outs = day.ev.filter(e=>e.type==='out');
+    const first = ins[0] || null, lastOut = outs[outs.length-1] || null;
+    return { who:day.who, d:day.d, start:first, end: open ? null : lastOut, mins, open: !!open, missingEnd, missingStart, breaks: Math.max(0, ins.length-1) };
+  }).sort((a,b)=> a.who.localeCompare(b.who) || a.d.localeCompare(b.d));
+}
+const mapLink = c => c && c.lat ? `https://maps.google.com/?q=${c.lat},${c.lng}` : '';
+function buildWorkdayReport(from, to, person){
+  if (!isHoursAdmin()) return 'דוח ימי עבודה זמין לאבישי והילה בלבד';
+  const rows = workdays(from, to, person);
+  let msg = `*דוח ימי עבודה — התחלה וסיום*\n📅 ${fmtDate(from)} — ${fmtDate(to)}${person ? '\n👷 ' + person : ''}\n`;
+  if (!rows.length) return msg + '\nאין סימוני התחלה/סיום יום בתקופה זו';
+  let cur = '', tot = 0, days = 0;
+  const close = () => { if (cur) msg += `   *סה"כ: ${days} ימים · ${fmtDur(tot)} שעות*\n`; };
+  rows.forEach(r => {
+    if (r.who !== cur){ close(); cur = r.who; tot = 0; days = 0; msg += `\n👷 *${r.who}*\n`; }
+    days++; tot += r.mins;
+    const st = r.start ? r.start.t : '—';
+    const en = r.end ? r.end.t : (r.d === today() && r.open ? 'עדיין בעבודה' : 'לא סומן ⚠️');
+    msg += `▫️ ${fmtDate(r.d)}: ${st} – ${en}${r.mins ? ' (' + fmtDur(r.mins) + ')' : ''}`;
+    if (r.breaks) msg += r.breaks === 1 ? ' · הפסקה אחת' : ` · ${r.breaks} הפסקות`;
+    if (r.missingStart) msg += ' · סיום בלי התחלה ⚠️';
+    if ((r.start && r.start.noGps) || (r.end && r.end.noGps)) msg += ' · ללא GPS';
+    msg += '\n';
+  });
+  close();
+  return msg + '\n_VAS Security Technology LTD_';
+}
+function exportWorkdayXlsx(){
+  if (!isHoursAdmin()){ toastMsg('לאבישי והילה בלבד'); return; }
+  const list = workdays(wdFrom, wdTo, wdWho);
+  if (!list.length){ toastMsg('אין סימוני יום עבודה בתקופה'); return; }
+  const rows = [['עובד','תאריך','התחלת יום','סיום יום','שעות','הערות','מיקום התחלה','מיקום סיום']];
+  let cur = '', tot = 0;
+  const close = () => { if (cur){ rows.push([cur,'','','סה"כ לתקופה', +(tot/60).toFixed(2),'','','']); rows.push(['','','','','','','','']); } };
+  list.forEach(r => {
+    if (r.who !== cur){ close(); cur = r.who; tot = 0; }
+    tot += r.mins;
+    const notes = [r.end ? '' : (r.open && r.d === today() ? 'עדיין בעבודה' : 'לא סומן סיום'), r.missingStart ? 'סיום בלי התחלה' : '', r.breaks ? (r.breaks === 1 ? 'הפסקה אחת' : r.breaks + ' הפסקות') : ''].filter(Boolean).join(' · ');
+    rows.push([r.who, fmtDate(r.d), r.start ? r.start.t : '', r.end ? r.end.t : '', +(r.mins/60).toFixed(2), notes, mapLink(r.start), mapLink(r.end)]);
+  });
+  close();
+  downloadXlsx(rows, 'ימי עבודה', 'vas-workdays-' + wdFrom + '-to-' + wdTo + (wdWho ? '-' + wdWho : '') + '.xlsx');
 }
 async function acceptLead(fid){
   if (!isAdmin()){ toastMsg('קליטת קריאות למנהלים בלבד'); return; }
@@ -864,10 +920,20 @@ function renderHome(){
     const mine = allCheckins().filter(c=>c.by===USER && c.d===today());
     const last = mine[mine.length-1];
     const onSite = last && last.type==='in';
+    const first = mine.find(c=>c.type==='in');
+    const w = workdays(today(), today(), USER)[0];
+    const status = onSite ? `התחלת ב-${esc(first ? first.t : last.t)} · יום העבודה פעיל`
+      : last ? `סיימת ב-${esc(last.t)}${w && w.mins ? ' · ' + fmtDur(w.mins) + ' שעות' : ''}`
+      : 'טרם התחלת את יום העבודה';
+    const btn = onSite
+      ? `<button class="btn-mini" style="background:#D64545;flex-shrink:0;padding:10px 14px" onclick="checkOut()">⏹ סיום יום עבודה</button>`
+      : last
+        ? `<button class="btn-mini" style="background:#8A8F9C;flex-shrink:0" onclick="openCheckIn()">▶️ חזרה לעבודה</button>`
+        : `<button class="btn-mini" style="background:#3E8E5A;flex-shrink:0;padding:10px 14px" onclick="openCheckIn()">▶️ התחלת יום עבודה</button>`;
     return `<div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:10px">
-      <div><div class="card-title" style="margin:0">🕒 נוכחות ${helpBtn('checkin')}</div>
-      <div class="settings-sub">${onSite?`באתר: ${esc(last.site||'')} · מאז ${esc(last.t)}`:(last?`היום: סיימת ב-${esc(last.t)}`:'טרם סומנה הגעה היום')}</div></div>
-      ${onSite?`<button class="btn-mini" style="background:#D64545;flex-shrink:0" onclick="checkOut()">🏁 סימון עזיבה</button>`:`<button class="btn-mini" style="background:#3E8E5A;flex-shrink:0" onclick="openCheckIn()">📍 סימון הגעה</button>`}
+      <div><div class="card-title" style="margin:0">🕒 יום עבודה ${helpBtn('checkin')}</div>
+      <div class="settings-sub">${status}</div></div>
+      ${btn}
     </div>`;
   })() : '';
   const open = S.tasks.filter(t=>!['בוצע','אושר'].includes(t.status));
@@ -1469,9 +1535,9 @@ function buildDailyReport(d){
 
   const att = allCheckins().filter(c=>c.d===d && (isHoursAdmin() || c.by===USER));
   if (att.length){
-    msg += `\n🕒 *נוכחות:*\n`;
+    msg += `\n🕒 *יום עבודה:*\n`;
     att.forEach(c => {
-      msg += `${c.type==='in'?'📍':'🏁'} ${c.by} — ${c.type==='in'?'הגעה':'עזיבה'} ${c.t}${c.site?' · '+c.site:''}`;
+      msg += `${c.type==='in'?'▶️':'⏹'} ${c.by} — ${c.type==='in'?'התחלה':'סיום'} ${c.t}${c.site?' · '+c.site:''}`;
       if (c.lat) msg += `\nמפה: https://maps.google.com/?q=${c.lat},${c.lng}`;
       if (c.noGps) msg += ' ⚠️ ללא GPS';
       msg += `\n`;
@@ -1497,6 +1563,7 @@ function renderReports(){
   if (!reportDate) reportDate = today();
   if (!billFrom){ billFrom = today().slice(0,8) + '01'; billTo = today(); }
   if (!presFrom){ presFrom = today().slice(0,8) + '01'; presTo = today(); }
+  if (!wdFrom){ wdFrom = today().slice(0,8) + '01'; wdTo = today(); }
   const dailyRep = buildDailyReport(reportDate);
   const projRep = reportProj ? buildProjReport(reportProj) : '';
   const persRep = reportPerson ? buildPersonReport(reportPerson) : '';
@@ -1513,7 +1580,25 @@ function renderReports(){
     </div>
     ${isHoursAdmin()?`
     <div class="card">
-      <div class="card-title">📍 דוח נוכחות ושעות ${helpBtn('presence')}</div>
+      <div class="card-title">🕒 דוח ימי עבודה — התחלה וסיום ${helpBtn('workday')}</div>
+      <div class="form-2col">
+        <div><label style="display:block;font-size:12px;font-weight:700;color:#555B69;margin-bottom:4px">מתאריך</label><input type="date" value="${esc(wdFrom)}" onchange="wdFrom=this.value;render()"></div>
+        <div><label style="display:block;font-size:12px;font-weight:700;color:#555B69;margin-bottom:4px">עד תאריך</label><input type="date" value="${esc(wdTo)}" onchange="wdTo=this.value;render()"></div>
+      </div>
+      <label style="display:block;font-size:12px;font-weight:700;color:#555B69;margin:8px 0 4px">איש צוות</label>
+      <select onchange="wdWho=this.value;render()">
+        <option value="">כל הצוות</option>
+        ${S.team.map(m=>`<option value="${esc(m.name)}"${wdWho===m.name?' selected':''}>${esc(m.name)}</option>`).join('')}
+      </select>
+      <pre class="report-preview">${esc(buildWorkdayReport(wdFrom, wdTo, wdWho))}</pre>
+      <div class="form-actions">
+        <button class="btn-secondary" onclick="copyReport('workday')">📋 העתקה</button>
+        <button class="btn-secondary" onclick="exportWorkdayXlsx()">📊 אקסל</button>
+        <button class="btn-primary" onclick="waReport('workday')">💬 וואטסאפ</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">📍 נוכחות באתרים (לפי משימות וקריאות) ${helpBtn('presence')}</div>
       <div class="form-2col">
         <div><label style="display:block;font-size:12px;font-weight:700;color:#555B69;margin-bottom:4px">מתאריך</label><input type="date" value="${esc(presFrom)}" onchange="presFrom=this.value;render()"></div>
         <div><label style="display:block;font-size:12px;font-weight:700;color:#555B69;margin-bottom:4px">עד תאריך</label><input type="date" value="${esc(presTo)}" onchange="presTo=this.value;render()"></div>
@@ -1581,11 +1666,11 @@ function renderReports(){
     </div>`;
 }
 function copyReport(kind){
-  const text = kind==='presence' ? buildPresenceReport(presFrom, presTo, presWho) : kind==='billing' ? buildBillingReport(billFrom, billTo) : kind==='daily' ? buildDailyReport(reportDate) : kind==='proj' ? buildProjReport(reportProj) : buildPersonReport(reportPerson);
+  const text = kind==='workday' ? buildWorkdayReport(wdFrom, wdTo, wdWho) : kind==='presence' ? buildPresenceReport(presFrom, presTo, presWho) : kind==='billing' ? buildBillingReport(billFrom, billTo) : kind==='daily' ? buildDailyReport(reportDate) : kind==='proj' ? buildProjReport(reportProj) : buildPersonReport(reportPerson);
   copyText(text); toastMsg('הועתק — אפשר להדביק בוואטסאפ');
 }
 function waReport(kind){
-  const text = kind==='presence' ? buildPresenceReport(presFrom, presTo, presWho) : kind==='billing' ? buildBillingReport(billFrom, billTo) : kind==='daily' ? buildDailyReport(reportDate) : kind==='proj' ? buildProjReport(reportProj) : buildPersonReport(reportPerson);
+  const text = kind==='workday' ? buildWorkdayReport(wdFrom, wdTo, wdWho) : kind==='presence' ? buildPresenceReport(presFrom, presTo, presWho) : kind==='billing' ? buildBillingReport(billFrom, billTo) : kind==='daily' ? buildDailyReport(reportDate) : kind==='proj' ? buildProjReport(reportProj) : buildPersonReport(reportPerson);
   window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
 }
 
@@ -2314,8 +2399,7 @@ function buildPresenceReport(from, to, person){
   const add = (p, where) => { if (p.d >= from && p.d <= to && (!person || p.by === person)) ev.push({ by:p.by, type:p.type, d:p.d, t:p.t, where }); };
   S.tasks.forEach(t => (t.presence||[]).forEach(p => add(p, projName(t.projectId) + (t.location ? ' · ' + t.location : ''))));
   S.calls.forEach(c => (c.presence||[]).forEach(p => add(p, c.customer)));
-  allCheckins().forEach(c => add(c, c.site || 'סימון כללי'));
-  let msg = `*דוח נוכחות ושעות*\n📅 ${fmtDate(from)} — ${fmtDate(to)}${person ? '\n👷 ' + person : ''}\n`;
+  let msg = `*דוח נוכחות באתרים*\n📅 ${fmtDate(from)} — ${fmtDate(to)}${person ? '\n👷 ' + person : ''}\n`;
   if (!ev.length) return msg + '\nאין רישומי נוכחות בתקופה זו';
   const byPerson = {};
   ev.forEach(e => { (byPerson[e.by] = byPerson[e.by] || []).push(e); });
@@ -2393,7 +2477,6 @@ function exportPresenceXlsx(){
   const add = (p, where) => { if (p.d >= from && p.d <= to && (!person || p.by === person)) ev.push({ ...p, where }); };
   S.tasks.forEach(t => (t.presence||[]).forEach(p => add(p, projName(t.projectId) + (t.location?' · '+t.location:''))));
   S.calls.forEach(c => (c.presence||[]).forEach(p => add(p, c.customer)));
-  allCheckins().forEach(c => add(c, c.site || 'סימון כללי'));
   if (!ev.length){ toastMsg('אין רישומי נוכחות בתקופה'); return; }
   const rows = [['עובד','תאריך','אתר','הגעה','סיום','משך (שעות)','GPS']];
   const byP = {};
