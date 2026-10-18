@@ -255,6 +255,26 @@ const db = firebase.firestore();
 db.enablePersistence({ synchronizeTabs: true }).catch(e => console.warn('persistence:', e.code));
 const DOC = db.collection('vas').doc('punch');
 const PHOTOS = db.collection('vas');
+// נוכחות מהכרטיס הראשי — במסמך נפרד, כדי ששמירה של מסמך המשימות ממכשיר אחר לא תמחק רישומים
+const CHECKINS_DOC = db.collection('vas').doc('checkins');
+let CHECKINS = [], unsubCheckins = null;
+function allCheckins(){
+  const seen = new Set(), out = [];
+  [...((S && S.checkins) || []), ...CHECKINS].forEach(c => { if (c && c.id && !seen.has(c.id)){ seen.add(c.id); out.push(c); } });
+  return out.sort((a,b) => ((a.d||'') + (a.t||'')).localeCompare((b.d||'') + (b.t||'')));
+}
+async function saveCheckin(rec){
+  CHECKINS.push(rec);
+  try {
+    await CHECKINS_DOC.set({ list: firebase.firestore.FieldValue.arrayUnion(rec) }, { merge: true });
+  } catch(e){
+    console.error(e);
+    // גיבוי: אם המסמך הנפרד חסום בחוקים — לשמור כמו קודם בתוך מסמך המשימות
+    S.checkins = S.checkins || []; S.checkins.push(rec);
+    if (S.checkins.length > 600) S.checkins = S.checkins.slice(-600);
+    await persist();
+  }
+}
 
 const READONLY = new URLSearchParams(location.search).get('view') === '1';
 const ADMINS = ["אבישי","ליאל","הילה"];
@@ -467,9 +487,7 @@ async function doCheckIn(){
   if (!site){ toastMsg('בחרו אתר'); return; }
   toastMsg('📡 מאתר מיקום…');
   const pos = await getPos();
-  S.checkins = S.checkins || [];
-  S.checkins.push(Object.assign({ id: uid(), type:'in', by:USER, d:today(), t:nowTime(), site, noGps: !pos }, pos || {}));
-  if (S.checkins.length > 600) S.checkins = S.checkins.slice(-600);
+  await saveCheckin(Object.assign({ id: uid(), type:'in', by:USER, d:today(), t:nowTime(), site, noGps: !pos }, pos || {}));
   pushLog('📍 סימן הגעה: ' + site + (pos ? '' : ' (ללא מיקום)'));
   await persist(); closeModal(); render();
   toastMsg(pos ? '📍 ההגעה נרשמה עם מיקום ✓' : 'ההגעה נרשמה — ללא GPS (אין הרשאת מיקום)');
@@ -478,11 +496,9 @@ async function checkOut(){
   if (!guardEdit()) return;
   toastMsg('📡 מאתר מיקום…');
   const pos = await getPos();
-  const mine = (S.checkins||[]).filter(c=>c.by===USER && c.d===today() && c.type==='in');
+  const mine = allCheckins().filter(c=>c.by===USER && c.d===today() && c.type==='in');
   const site = mine.length ? mine[mine.length-1].site : '';
-  S.checkins = S.checkins || [];
-  S.checkins.push(Object.assign({ id: uid(), type:'out', by:USER, d:today(), t:nowTime(), site, noGps: !pos }, pos || {}));
-  if (S.checkins.length > 600) S.checkins = S.checkins.slice(-600);
+  await saveCheckin(Object.assign({ id: uid(), type:'out', by:USER, d:today(), t:nowTime(), site, noGps: !pos }, pos || {}));
   pushLog('🏁 סימן עזיבה' + (site ? ': ' + site : '') + (pos ? '' : ' (ללא מיקום)'));
   await persist(); render();
   toastMsg('🏁 העזיבה נרשמה ✓');
@@ -602,6 +618,7 @@ auth.onAuthStateChanged(u => {
     startWlogSync();
   } else {
     if (unsubData){ unsubData(); unsubData = null; }
+    if (unsubCheckins){ unsubCheckins(); unsubCheckins = null; } CHECKINS = [];
     if (unsubLeads){ unsubLeads(); unsubLeads = null; }
     stopWlogSync();
     LEADS = [];
@@ -619,6 +636,10 @@ function startData(){
     LEADS.sort((a,b)=>['דחוף','גבוה','בינוני','רגיל'].indexOf(a.urgency||'רגיל') - ['דחוף','גבוה','בינוני','רגיל'].indexOf(b.urgency||'רגיל'));
     if (S) render();
   }, () => {});
+  unsubCheckins = CHECKINS_DOC.onSnapshot(snap => {
+    CHECKINS = (snap.exists && snap.data().list) || [];
+    if (S) render();
+  }, e => console.warn('checkins:', e.code));
   unsubData = DOC.onSnapshot(snap => {
   setConn(true);
   if (!snap.exists) {
@@ -840,7 +861,7 @@ function renderHome(){
       <button class="btn-mini" style="background:#D64545" onclick="dropLead('${l.fid}')">✕</button>
     </div></div></div>`).join('') + `</div>` : '';
   const ciHtml = (!READONLY && USER) ? (()=>{
-    const mine = (S.checkins||[]).filter(c=>c.by===USER && c.d===today());
+    const mine = allCheckins().filter(c=>c.by===USER && c.d===today());
     const last = mine[mine.length-1];
     const onSite = last && last.type==='in';
     return `<div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:10px">
@@ -1446,7 +1467,7 @@ function buildDailyReport(d){
     openC.forEach(c => { msg += `▫️ ${c.customer} — ${c.desc} (${c.status})${c.technician ? ' · ' + c.technician : ''}\n`; });
   }
 
-  const att = (S.checkins||[]).filter(c=>c.d===d);
+  const att = allCheckins().filter(c=>c.d===d && (isHoursAdmin() || c.by===USER));
   if (att.length){
     msg += `\n🕒 *נוכחות:*\n`;
     att.forEach(c => {
@@ -2293,6 +2314,7 @@ function buildPresenceReport(from, to, person){
   const add = (p, where) => { if (p.d >= from && p.d <= to && (!person || p.by === person)) ev.push({ by:p.by, type:p.type, d:p.d, t:p.t, where }); };
   S.tasks.forEach(t => (t.presence||[]).forEach(p => add(p, projName(t.projectId) + (t.location ? ' · ' + t.location : ''))));
   S.calls.forEach(c => (c.presence||[]).forEach(p => add(p, c.customer)));
+  allCheckins().forEach(c => add(c, c.site || 'סימון כללי'));
   let msg = `*דוח נוכחות ושעות*\n📅 ${fmtDate(from)} — ${fmtDate(to)}${person ? '\n👷 ' + person : ''}\n`;
   if (!ev.length) return msg + '\nאין רישומי נוכחות בתקופה זו';
   const byPerson = {};
@@ -2371,6 +2393,7 @@ function exportPresenceXlsx(){
   const add = (p, where) => { if (p.d >= from && p.d <= to && (!person || p.by === person)) ev.push({ ...p, where }); };
   S.tasks.forEach(t => (t.presence||[]).forEach(p => add(p, projName(t.projectId) + (t.location?' · '+t.location:''))));
   S.calls.forEach(c => (c.presence||[]).forEach(p => add(p, c.customer)));
+  allCheckins().forEach(c => add(c, c.site || 'סימון כללי'));
   if (!ev.length){ toastMsg('אין רישומי נוכחות בתקופה'); return; }
   const rows = [['עובד','תאריך','אתר','הגעה','סיום','משך (שעות)','GPS']];
   const byP = {};
@@ -2380,18 +2403,18 @@ function exportPresenceXlsx(){
     let openIn = null, total = 0;
     list.forEach(e => {
       if (e.type === 'in'){
-        if (openIn) rows.push([who, fmtDate(openIn.d), openIn.where, openIn.t, 'ללא סיום ⚠️', '', openIn.lat + ',' + openIn.lng]);
+        if (openIn) rows.push([who, fmtDate(openIn.d), openIn.where, openIn.t, 'ללא סיום ⚠️', '', (openIn.lat ? openIn.lat + ',' + openIn.lng : '')]);
         openIn = e;
       } else if (openIn && openIn.d === e.d){
         const mins = toMins(e.t) - toMins(openIn.t);
         total += Math.max(0, mins);
-        rows.push([who, fmtDate(e.d), openIn.where, openIn.t, e.t, +(mins/60).toFixed(2), openIn.lat + ',' + openIn.lng]);
+        rows.push([who, fmtDate(e.d), openIn.where, openIn.t, e.t, +(mins/60).toFixed(2), (openIn.lat ? openIn.lat + ',' + openIn.lng : '')]);
         openIn = null;
       } else {
-        rows.push([who, fmtDate(e.d), e.where, '', e.t + ' (ללא הגעה)', '', e.lat + ',' + e.lng]);
+        rows.push([who, fmtDate(e.d), e.where, '', e.t + ' (ללא הגעה)', '', (e.lat ? e.lat + ',' + e.lng : '')]);
       }
     });
-    if (openIn) rows.push([who, fmtDate(openIn.d), openIn.where, openIn.t, 'ללא סיום ⚠️', '', openIn.lat + ',' + openIn.lng]);
+    if (openIn) rows.push([who, fmtDate(openIn.d), openIn.where, openIn.t, 'ללא סיום ⚠️', '', (openIn.lat ? openIn.lat + ',' + openIn.lng : '')]);
     rows.push([who, '', 'סה"כ לתקופה', '', '', +(total/60).toFixed(2), '']);
     rows.push(['', '', '', '', '', '', '']);
   });
