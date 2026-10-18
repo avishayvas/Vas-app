@@ -70,8 +70,11 @@ input:focus, select:focus, textarea:focus { outline: 2px solid #C9962E; border-c
     <label>טלפון *</label>
     <input id="f_phone" inputmode="tel" placeholder="050-0000000">
 
-    <label>אתר / סניף / כתובת *</label>
-    <input id="f_site" placeholder="מקס סטוק חולון / שם האתר">
+    <label>חברה / שם העסק *</label>
+    <input id="f_org" placeholder="לדוגמה: מקס סטוק / ועד הבית רח׳ הרצל 5">
+
+    <label>סניף / אתר / כתובת *</label>
+    <input id="f_site" placeholder="לדוגמה: סניף חולון / בניין ב׳">
 
     <label>במה התקלה? *</label>
     <div class="tiles" id="topicTiles"></div>
@@ -252,10 +255,11 @@ async function send(){
   const name = document.getElementById('f_name').value.trim();
   const phone = document.getElementById('f_phone').value.trim();
   const site = document.getElementById('f_site').value.trim();
+  const org = document.getElementById('f_org').value.trim();
   const qty = document.getElementById('f_qty').value.trim();
   const desc = document.getElementById('f_desc').value.trim();
   if (document.getElementById('f_company').value) return; /* honeypot */
-  if (!name || !phone || !site){ err.textContent = 'נא למלא שם, טלפון ואתר'; return; }
+  if (!name || !phone || !org || !site){ err.textContent = 'נא למלא שם, טלפון, חברה וסניף'; return; }
   if (!topic){ err.textContent = 'בחרו במה התקלה'; return; }
   if (!action){ err.textContent = 'בחרו מה צריך לעשות (או "שהטכנאי יבדוק")'; return; }
   if (needDesc() && desc.length < 15){
@@ -271,7 +275,7 @@ async function send(){
       photoIds.push(ref.id);
     }
     await db.collection('vas_intake').add({
-      name, phone, site, topic: topic.k, action, symptoms, down, when, qty, desc, urgency, photoIds,
+      name, phone, org, site, topic: topic.k, action, symptoms, down, when, qty, desc, urgency, photoIds,
       at: new Date().toISOString()
     });
     document.getElementById('form').style.display = 'none';

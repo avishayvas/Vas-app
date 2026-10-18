@@ -102,6 +102,20 @@ main { padding: 14px 14px 150px; max-width: 760px; margin: 0 auto; }  /* מרו�
 .btn-danger { background: #FBEAEA; color: #D64545; border: none; border-radius: 10px; padding: 12px 16px; font-family: inherit; font-weight: 700; font-size: 14px; cursor: pointer; }
 .btn-mini { background: #C9962E; color: #fff; border: none; border-radius: 8px; padding: 5px 12px; font-family: inherit; font-weight: 700; font-size: 12px; cursor: pointer; }
 
+.cr-sum { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin: 12px 0 10px; }
+.cr-pill { --uc: #1B1F2A; background: #fff; border: 1.5px solid #E2DFD5; border-radius: 10px; padding: 6px 2px; font-family: inherit; font-size: 11.5px; font-weight: 700; color: #555B69; cursor: pointer; display: flex; flex-direction: column; align-items: center; }
+.cr-pill b { font-size: 18px; color: var(--uc); line-height: 1.1; }
+.cr-pill.on { border-color: var(--uc); box-shadow: 0 0 0 1px var(--uc) inset; background: #FAF8F2; }
+.cr-list { display: flex; flex-direction: column; gap: 8px; max-height: 520px; overflow-y: auto; }
+.cr-row { background: #FAF9F4; border: 1px solid #ECE9DF; border-inline-start: 5px solid #ccc; border-radius: 10px; padding: 9px 11px; cursor: pointer; }
+.cr-top { display: flex; align-items: center; gap: 8px; }
+.cr-urg { color: #fff; font-size: 11px; font-weight: 800; border-radius: 10px; padding: 2px 9px; flex-shrink: 0; }
+.cr-client { font-weight: 800; font-size: 14px; flex: 1; min-width: 0; }
+.cr-branch { font-weight: 600; color: #555B69; }
+.cr-date { font-size: 11.5px; color: #8A8F9C; flex-shrink: 0; }
+.cr-fault { font-size: 13px; color: #1B1F2A; margin: 5px 0 4px; white-space: pre-wrap; word-break: break-word; }
+.cr-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: #555B69; }
+.cr-st { font-weight: 700; }
 .photo-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
 .photo-thumb { position: relative; }
 .photo-thumb img { width: 64px; height: 64px; object-fit: cover; border-radius: 10px; border: 1px solid #E2DFD5; }
@@ -783,7 +797,10 @@ async function importIntake(docId, d){
   const c = {
     id: uid(), created: today(),
     createdTime: String(dt.getHours()).padStart(2,'0') + ':' + String(dt.getMinutes()).padStart(2,'0'),
-    customer: (d.site || '').trim(),
+    customer: ((d.org ? d.org.trim() + ' — ' : '') + (d.site || '').trim()).trim(),
+    client: (d.org || '').trim(), branch: d.org ? (d.site || '').trim() : '',
+    opener: (d.name || '').trim() ? d.name.trim() + ' (לקוח)' : '',
+    topic: d.topic || '', action: d.action || '',
     desc: (d.topic ? d.topic : '') + (d.action ? ' · ' + d.action : '') + (d.symptoms && d.symptoms.length ? '\n🔎 ' + d.symptoms.join(' · ') : '') + (d.qty ? '\n📦 כמות: ' + d.qty : '') + ((d.desc) ? '\n' + d.desc : ''),
     phone: (d.phone || '').trim(),
     technician: '', urgency: urgMap[d.urgency] || 'רגיל', status: 'חדשה',
@@ -941,6 +958,136 @@ function renderNav(){
 function goTab(k){ tab = k; render(); window.scrollTo(0,0); }
 
 /* ==================== Render ==================== */
+/* ==================== דוח קריאות שירות ==================== */
+let crFrom = '', crTo = '', crStatus = 'open', crUrg = '', crClient = '';
+function callClientBranch(c){
+  if (c.client) return { client: c.client, branch: c.branch || (c.customer !== c.client ? c.customer : '') };
+  const cu = (c.customer || '').trim();
+  if (branchByName(cu)) return { client: 'מקס סטוק', branch: cu };
+  const p = (S.projects||[]).find(x => x.name === cu);
+  if (p && p.client && p.client !== p.name) return { client: p.client, branch: p.name };
+  const m = cu.match(/^(.+?)\s+[—–-]\s+(.+)$/);
+  if (m) return { client: m[1], branch: m[2] };
+  return { client: cu, branch: '' };
+}
+function callOpener(c){
+  if (c.opener) return c.opener;
+  const cb = c.createdBy || '';
+  if (cb.startsWith('לקוח:')) return cb.replace(/^לקוח:\s*/, '') + ' (לקוח)';
+  return cb;
+}
+function callFault(c){
+  const first = String(c.desc || '').split('\n')[0].replace(/\s+—\s+.*/, '').trim();
+  return first.length > 90 ? first.slice(0, 88) + '…' : first;
+}
+function callReportRows(ignoreUrg){
+  const U = { 'דחוף':0, 'גבוה':1, 'רגיל':2, 'נמוך':3 };
+  return S.calls.filter(c => {
+    const d = c.created || '';
+    if (crFrom && d < crFrom) return false;
+    if (crTo && d > crTo) return false;
+    if (crStatus === 'open' && c.status === 'נסגרה') return false;
+    if (crStatus === 'closed' && c.status !== 'נסגרה') return false;
+    if (!ignoreUrg && crUrg && c.urgency !== crUrg) return false;
+    if (crClient && callClientBranch(c).client !== crClient) return false;
+    return true;
+  }).map(c => Object.assign({ c, opener: callOpener(c), fault: callFault(c) }, callClientBranch(c)))
+    .sort((a,b) => (U[a.c.urgency] ?? 9) - (U[b.c.urgency] ?? 9) || ((b.c.created||'') + (b.c.createdTime||'')).localeCompare((a.c.created||'') + (a.c.createdTime||'')));
+}
+function callsReportCard(){
+  if (!isAdmin()) return '';
+  if (!crFrom){ crFrom = addDays(today(), -30); crTo = today(); }
+  const rows = callReportRows();
+  const base = callReportRows(true);
+  const cnt = u => base.filter(r => r.c.urgency === u).length;
+  const clients = [...new Set(S.calls.map(c => callClientBranch(c).client).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'he'));
+  const lab = 'display:block;font-size:12px;font-weight:700;color:#555B69;margin-bottom:4px';
+  return `
+  <div class="card">
+    <div class="card-title">📋 דוח קריאות שירות</div>
+    <div class="form-2col">
+      <div><label style="${lab}">נפתחו מתאריך</label><input type="date" value="${esc(crFrom)}" onchange="crFrom=this.value;render()"></div>
+      <div><label style="${lab}">עד תאריך</label><input type="date" value="${esc(crTo)}" onchange="crTo=this.value;render()"></div>
+    </div>
+    <div class="form-2col" style="margin-top:8px">
+      <div><label style="${lab}">סטטוס</label><select onchange="crStatus=this.value;render()">
+        <option value="open"${crStatus==='open'?' selected':''}>פתוחות בלבד</option>
+        <option value="all"${crStatus==='all'?' selected':''}>הכול</option>
+        <option value="closed"${crStatus==='closed'?' selected':''}>סגורות בלבד</option></select></div>
+      <div><label style="${lab}">לקוח</label><select onchange="crClient=this.value;render()">
+        <option value="">כל הלקוחות</option>${clients.map(n=>`<option${crClient===n?' selected':''}>${esc(n)}</option>`).join('')}</select></div>
+    </div>
+    <div class="cr-sum">
+      <button class="cr-pill${!crUrg?' on':''}" onclick="crUrg='';render()"><b>${base.length}</b>הכול</button>
+      ${URGENCIES.map(u=>`<button class="cr-pill${crUrg===u?' on':''}" style="--uc:${URGENCY_COLORS[u]}" onclick="crUrg=crUrg==='${u}'?'':'${u}';render()"><b>${cnt(u)}</b>${u}</button>`).join('')}
+    </div>
+    ${rows.length ? `<div class="cr-list">${rows.map((r,i)=>`
+      <div class="cr-row" style="border-inline-start-color:${URGENCY_COLORS[r.c.urgency]||'#8A8F9C'}" onclick="openCallForm('${r.c.id}')">
+        <div class="cr-top">
+          <span class="cr-urg" style="background:${URGENCY_COLORS[r.c.urgency]||'#8A8F9C'}">${esc(r.c.urgency||'')}</span>
+          <span class="cr-client">${esc(r.client)}${r.branch?` <span class="cr-branch">· ${esc(r.branch)}</span>`:''}</span>
+          <span class="cr-date">${fmtDate(r.c.created||'')}${r.c.createdTime?' '+esc(r.c.createdTime):''}</span>
+        </div>
+        <div class="cr-fault">${esc(r.fault)}</div>
+        <div class="cr-meta">
+          <span>👤 ${esc(r.opener || '—')}</span>
+          <span>👷 ${esc(r.c.technician || 'לא שובץ')}</span>
+          <span class="cr-st" style="color:${CALL_STATUS_COLORS[r.c.status]||'#555'}">● ${esc(r.c.status||'')}</span>
+        </div>
+      </div>`).join('')}</div>` : '<div class="empty" style="padding:16px;text-align:center;color:#8A8F9C">אין קריאות לפי הסינון</div>'}
+    <div class="form-actions" style="margin-top:10px">
+      <button class="btn-secondary" onclick="printCallsReport()">🖨️ הדפסה / PDF</button>
+      <button class="btn-secondary" onclick="exportCallsXlsx()">📊 אקסל</button>
+      <button class="btn-primary" onclick="waReport('calls')">💬 וואטסאפ</button>
+    </div>
+  </div>`;
+}
+function crFilterLine(){
+  return `${fmtDate(crFrom)} — ${fmtDate(crTo)} · ${crStatus==='open'?'פתוחות':crStatus==='closed'?'סגורות':'כל הקריאות'}${crUrg?' · דחיפות: '+crUrg:''}${crClient?' · '+crClient:''}`;
+}
+function buildCallsReport(){
+  const rows = callReportRows();
+  let msg = `*דוח קריאות שירות*\n📅 ${crFilterLine()}\nסה"כ: ${rows.length}\n`;
+  let cur = null;
+  rows.forEach(r => {
+    if (r.c.urgency !== cur){ cur = r.c.urgency; msg += `\n${cur==='דחוף'?'🔴':cur==='גבוה'?'🟠':cur==='רגיל'?'🔵':'⚪'} *${cur}*\n`; }
+    msg += `▫️ ${r.client}${r.branch?' · '+r.branch:''} — ${r.fault}\n   👤 ${r.opener||'—'} · ${fmtDate(r.c.created||'')} · ${r.c.status}${r.c.technician?' · 👷 '+r.c.technician:''}\n`;
+  });
+  return msg + '\n_VAS Security Technology LTD_';
+}
+function exportCallsXlsx(){
+  const rows = callReportRows();
+  if (!rows.length){ toastMsg('אין קריאות לפי הסינון'); return; }
+  const aoa = [['#','תאריך פתיחה','שעה','פותח הקריאה','לקוח','סניף','מהות התקלה','דחיפות','סטטוס','טכנאי','טלפון']];
+  rows.forEach((r,i) => aoa.push([i+1, fmtDate(r.c.created||''), r.c.createdTime||'', r.opener, r.client, r.branch, r.fault, r.c.urgency||'', r.c.status||'', r.c.technician||'', r.c.phone||'']));
+  downloadXlsx(aoa, 'קריאות שירות', 'vas-calls-' + crFrom + '-to-' + crTo + '.xlsx');
+}
+function printCallsReport(){
+  const rows = callReportRows();
+  if (!rows.length){ toastMsg('אין קריאות לפי הסינון'); return; }
+  const e = s => String(s||'').replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
+  const cnt = u => rows.filter(r => r.c.urgency === u).length;
+  const html = `<!doctype html><html dir="rtl" lang="he"><head><meta charset="utf-8"><title>דוח קריאות שירות</title>
+  <style>@page{size:A4 landscape;margin:12mm}body{font-family:Arial,'Heebo',sans-serif;color:#1B1F2A;margin:0}
+  .hd{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #C9962E;padding-bottom:8px;margin-bottom:10px}
+  .brand{font-size:22px;font-weight:900;color:#C9962E;letter-spacing:1px}.brand span{color:#1B1F2A;font-weight:300;font-size:14px;letter-spacing:3px}
+  h1{font-size:18px;margin:0}.sub{font-size:12px;color:#555B69;margin-top:3px}
+  .sum{display:flex;gap:8px;margin:8px 0 12px}.sum div{border:1px solid #DDD9CC;border-radius:8px;padding:5px 12px;font-size:12px}.sum b{font-size:16px;margin-left:6px}
+  table{width:100%;border-collapse:collapse;font-size:11.5px}th{background:#1B1F2A;color:#fff;text-align:right;padding:7px 6px;font-weight:700}
+  td{padding:6px;border-bottom:1px solid #E6E2D6;vertical-align:top}tr:nth-child(even) td{background:#FAF8F2}
+  .u{display:inline-block;color:#fff;border-radius:10px;padding:1px 9px;font-weight:700;font-size:11px}
+  .ft{margin-top:10px;font-size:10px;color:#8A8F9C;text-align:left}</style></head><body>
+  <div class="hd"><div><h1>דוח קריאות שירות</h1><div class="sub">${e(crFilterLine())} · הופק ${fmtDate(today())} ${nowTime()}</div></div><div class="brand">VAS <span>SECURITY</span></div></div>
+  <div class="sum"><div><b>${rows.length}</b>סה"כ</div>${URGENCIES.map(u=>`<div style="border-color:${URGENCY_COLORS[u]}"><b style="color:${URGENCY_COLORS[u]}">${cnt(u)}</b>${u}</div>`).join('')}</div>
+  <table><thead><tr><th>#</th><th>נפתחה</th><th>פותח הקריאה</th><th>לקוח</th><th>סניף</th><th>מהות התקלה</th><th>דחיפות</th><th>סטטוס</th><th>טכנאי</th></tr></thead><tbody>
+  ${rows.map((r,i)=>`<tr><td>${i+1}</td><td style="white-space:nowrap">${e(fmtDate(r.c.created||''))}<br><span style="color:#8A8F9C">${e(r.c.createdTime||'')}</span></td><td>${e(r.opener)}</td><td><b>${e(r.client)}</b></td><td>${e(r.branch)}</td><td>${e(r.fault)}</td><td><span class="u" style="background:${URGENCY_COLORS[r.c.urgency]||'#8A8F9C'}">${e(r.c.urgency)}</span></td><td>${e(r.c.status)}</td><td>${e(r.c.technician||'—')}</td></tr>`).join('')}
+  </tbody></table><div class="ft">VAS Security Technology LTD</div></body></html>`;
+  const f = document.createElement('iframe');
+  f.style.cssText = 'position:fixed;width:0;height:0;border:0;left:-9999px';
+  document.body.appendChild(f);
+  f.onload = () => { try { f.contentWindow.focus(); f.contentWindow.print(); } catch(err){ toastMsg('ההדפסה נחסמה'); } setTimeout(() => f.remove(), 60000); };
+  f.srcdoc = html;
+}
 function linkify(html){ return html.replace(/https:\/\/maps\.google\.com\/\?q=([\d.\-]+),([\d.\-]+)/g, (m)=>`<a href="${m}" target="_blank" style="color:#2A6FDB;font-weight:800;text-decoration:underline">פתח במפה</a>`); }
 function dayStartNag(){
   if (READONLY || !USER || isHoursAdmin() || window._dayNagShown) return;
@@ -1634,6 +1781,7 @@ function renderReports(){
   const projRep = reportProj ? buildProjReport(reportProj) : '';
   const persRep = reportPerson ? buildPersonReport(reportPerson) : '';
   return `
+    ${callsReportCard()}
     ${wlogReportCard()}
     <div class="card">
       <div class="card-title">📅 דוח יומי — בוצע / נותר לביצוע ${helpBtn('daily')}</div>
@@ -1732,11 +1880,11 @@ function renderReports(){
     </div>`;
 }
 function copyReport(kind){
-  const text = kind==='workday' ? buildWorkdayReport(wdFrom, wdTo, wdWho) : kind==='presence' ? buildPresenceReport(presFrom, presTo, presWho) : kind==='billing' ? buildBillingReport(billFrom, billTo) : kind==='daily' ? buildDailyReport(reportDate) : kind==='proj' ? buildProjReport(reportProj) : buildPersonReport(reportPerson);
+  const text = kind==='calls' ? buildCallsReport() : kind==='workday' ? buildWorkdayReport(wdFrom, wdTo, wdWho) : kind==='presence' ? buildPresenceReport(presFrom, presTo, presWho) : kind==='billing' ? buildBillingReport(billFrom, billTo) : kind==='daily' ? buildDailyReport(reportDate) : kind==='proj' ? buildProjReport(reportProj) : buildPersonReport(reportPerson);
   copyText(text); toastMsg('הועתק — אפשר להדביק בוואטסאפ');
 }
 function waReport(kind){
-  const text = kind==='workday' ? buildWorkdayReport(wdFrom, wdTo, wdWho) : kind==='presence' ? buildPresenceReport(presFrom, presTo, presWho) : kind==='billing' ? buildBillingReport(billFrom, billTo) : kind==='daily' ? buildDailyReport(reportDate) : kind==='proj' ? buildProjReport(reportProj) : buildPersonReport(reportPerson);
+  const text = kind==='calls' ? buildCallsReport() : kind==='workday' ? buildWorkdayReport(wdFrom, wdTo, wdWho) : kind==='presence' ? buildPresenceReport(presFrom, presTo, presWho) : kind==='billing' ? buildBillingReport(billFrom, billTo) : kind==='daily' ? buildDailyReport(reportDate) : kind==='proj' ? buildProjReport(reportProj) : buildPersonReport(reportPerson);
   window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
 }
 
