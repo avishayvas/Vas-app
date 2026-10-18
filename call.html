@@ -38,9 +38,17 @@ input:focus, select:focus, textarea:focus { outline: 2px solid #C9962E; border-c
 .tile { background: #fff; border: 1.5px solid #DDD9CC; border-radius: 12px; padding: 12px 4px 10px; text-align: center; font-family: inherit; font-weight: 700; font-size: 13px; color: #1B1F2A; cursor: pointer; line-height: 1.25; }
 .tile .ic { display: block; font-size: 26px; margin-bottom: 4px; }
 .tile.sel { border-color: #C9962E; background: #FBF2DC; box-shadow: 0 0 0 2px #C9962E inset; }
-.chips { display: flex; flex-wrap: wrap; gap: 7px; }
-.chip { background: #fff; border: 1.5px solid #DDD9CC; border-radius: 20px; padding: 9px 13px; font-family: inherit; font-weight: 600; font-size: 14px; color: #1B1F2A; cursor: pointer; }
-.chip.sel { background: #1B1F2A; border-color: #1B1F2A; color: #fff; }
+.chips { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.chips.three { grid-template-columns: repeat(3, 1fr); }
+.chip { display: flex; align-items: center; gap: 9px; min-height: 54px; background: #fff; border: 1.5px solid #E2DED2; border-radius: 12px; padding: 8px 11px; font-family: inherit; font-weight: 600; font-size: 13.5px; line-height: 1.3; color: #1B1F2A; text-align: right; cursor: pointer; transition: border-color .12s, background .12s; }
+.chip::before { content: ''; flex: 0 0 18px; height: 18px; border: 2px solid #C8C3B4; border-radius: 50%; background: #fff; box-sizing: border-box; }
+.chips.multi .chip::before { border-radius: 5px; }
+.chip.sel { border-color: #C9962E; background: #FBF2DC; box-shadow: 0 0 0 1px #C9962E inset; }
+.chip.sel::before { border-color: #C9962E; background: #C9962E url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/12px no-repeat; }
+.chips.three .chip { justify-content: center; text-align: center; padding: 8px 6px; }
+.chips.three .chip::before { display: none; }
+.chip.wide { grid-column: 1 / -1; justify-content: center; }
+.subhead { grid-column: 1 / -1; font-size: 12px; font-weight: 700; color: #8A7A50; margin: 4px 2px -2px; }
 .step { display: none; }
 .step.on { display: block; }
 .hint { font-size: 12.5px; color: #7A7F8C; font-weight: 500; margin-top: -2px; margin-bottom: 6px; }
@@ -71,7 +79,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid #C9962E; border-c
 
     <div class="step" id="stepSym">
       <label>מה קורה? <span style="font-weight:500">(אפשר לבחור כמה)</span></label>
-      <div class="chips" id="symChips"></div>
+      <div class="chips multi" id="symChips"></div>
     </div>
 
     <div class="step" id="stepAct">
@@ -83,7 +91,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid #C9962E; border-c
 
     <div class="step" id="stepDown">
       <label>המערכת עובדת?</label>
-      <div class="chips" id="downChips"></div>
+      <div class="chips three" id="downChips"></div>
     </div>
 
     <label>כמות רכיבים (אם רלוונטי)</label>
@@ -163,7 +171,7 @@ function renderThumbs(){
 }
 const TOPICS = [
   { k:'מצלמות אבטחה', ic:'📹', t:'מצלמות',
-    sym:['אין תמונה במצלמה','כל המצלמות לא עובדות','תמונה מטושטשת / מלוכלכת','לא מקליט / חסרות הקלטות','אין צפייה מהטלפון','ראיית לילה לא עובדת','מצלמה זזה / נפגעה','המסך / המקליט לא נדלק'],
+    sym:['אין תמונה במצלמה','כל המצלמות לא עובדות','תמונה מטושטשת','לא מקליט / חסרות הקלטות','אין צפייה מהטלפון','ראיית לילה לא עובדת','מצלמה זזה / נפגעה','המקליט לא נדלק'],
     act:['שליפת הקלטה / גיבוי','ניקוי וכיוון מצלמות','הוספת מצלמות','הגדרת צפייה בטלפון'],
     hint:'איזו מצלמה / איפה? ממתי? כמה מצלמות מושפעות?' },
   { k:'אזעקה / פריצה', ic:'🚨', t:'אזעקה',
@@ -200,7 +208,7 @@ const COMMON_ACTS = ['תיקון תקלה','החלפת רכיב','ניקוי','�
 const DOWN_OPTS = ['לא עובדת בכלל','עובדת חלקית','עובדת — רק צריך שיפור'];
 const WHEN_OPTS = ['כמה שיותר מהר','היום','מחר','בוקר (8–12)','צהריים (12–16)','תאום טלפוני'];
 let topic = null, symptoms = [], action = '', down = '', when = '';
-function chipsHtml(list, selFn, onName){ return list.map((o,i)=>`<button type="button" class="chip${selFn(o)?' sel':''}" onclick="${onName}(${i})">${o}</button>`).join(''); }
+function chipsHtml(list, selFn, onName){ return list.map((o,i)=>`<button type="button" class="chip${selFn(o)?' sel':''}${(list.length%2 && i===list.length-1 && onName!=='pickDown')?' wide':''}" onclick="${onName}(${i})">${o}</button>`).join(''); }
 function drawPicker(){
   document.getElementById('topicTiles').innerHTML = TOPICS.map((t,i)=>`<button type="button" class="tile${topic===t?' sel':''}" onclick="pickTopic(${i})"><span class="ic">${t.ic}</span>${t.t}</button>`).join('');
   const on = !!topic;
@@ -208,7 +216,13 @@ function drawPicker(){
   if (topic && !topic.sym.length) document.getElementById('stepSym').classList.remove('on');
   if (!on) return;
   document.getElementById('symChips').innerHTML = chipsHtml(topic.sym, o=>symptoms.includes(o), 'pickSym');
-  document.getElementById('actChips').innerHTML = chipsHtml(actList(), o=>action===o, 'pickAct');
+  const al = actList(), spec = topic.act.length;
+  const btn = (i, wide) => `<button type="button" class="chip${action===al[i]?' sel':''}${wide?' wide':''}" onclick="pickAct(${i})">${al[i]}</button>`;
+  const group = (a, b) => { let h = ''; for (let i = a; i < b; i++) h += btn(i, (b-a)%2 && i===b-1); return h; };
+  let ah = btn(0, true);
+  if (spec) ah += `<div class="subhead">${topic.k==='אחר'?'נוסף':'פעולות ב'+topic.t}</div>` + group(1 + COMMON_ACTS.length, al.length);
+  ah += `<div class="subhead">טיפול כללי</div>` + group(1, 1 + COMMON_ACTS.length);
+  document.getElementById('actChips').innerHTML = ah;
   document.getElementById('downChips').innerHTML = chipsHtml(DOWN_OPTS, o=>down===o, 'pickDown');
   document.getElementById('f_topic').value = topic.k;
   document.getElementById('f_action').value = action;
