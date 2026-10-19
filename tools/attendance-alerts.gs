@@ -11,6 +11,7 @@
  */
 const PROJECT = 'vas-schedule';
 const MANAGERS = ['avishay@s-vsecurity.com', 'office@s-vsecurity.com'];
+const NOT_CHECKED = ['אבישי', 'הילה'];   // לא נבדקים (הנהלה ומשרד)
 const APP_URL = 'https://avishayvas.github.io/Vas-app';
 const WORK_DAYS = [0, 1, 2, 3, 4];   // ראשון=0 … חמישי=4
 const STRIKE_WINDOW_DAYS = 30;
@@ -135,7 +136,7 @@ function decodeFields(f){ const o = {}; Object.keys(f).forEach(k => o[k] = decod
 
 function loadTeam(){
   const d = fsGet('vas/punch', ['team']) || {};
-  return (d.team || []).filter(m => m && m.email && m.name && !/מנהל/.test(m.role || '') && m.kind !== 'קבלן' && !/קבלן/.test(m.role || ''))
+  return (d.team || []).filter(m => m && m.email && m.name && NOT_CHECKED.indexOf(m.name) < 0 && MANAGERS.indexOf(String(m.email).trim().toLowerCase()) < 0 && m.kind !== 'קבלן' && !/קבלן/.test(m.role || ''))
     .map(m => ({ name: m.name, email: String(m.email).trim() }));
 }
 function loadCheckins(){

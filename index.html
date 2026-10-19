@@ -1078,7 +1078,7 @@ function callsReportCard(){
       <option value="">כל הטכנאים</option>
       <option value="__mine"${crTech==='__mine'?' selected':''}>👤 רק שלי</option>
       <option value="__none"${crTech==='__none'?' selected':''}>לא שובצו</option>
-      ${(S.team||[]).filter(m=>!/מנהל/.test(m.role||'')).map(m=>`<option value="${esc(m.name)}"${crTech===m.name?' selected':''}>${esc(m.name)}</option>`).join('')}</select></div>
+      ${(S.team||[]).filter(m=>!HOURS_ADMINS.includes(m.name)).map(m=>`<option value="${esc(m.name)}"${crTech===m.name?' selected':''}>${esc(m.name)}</option>`).join('')}</select></div>
     <div class="cr-sum">
       <button class="cr-pill${!crUrg?' on':''}" onclick="crUrg='';render()"><b>${base.length}</b>הכול</button>
       ${URGENCIES.map(u=>`<button class="cr-pill${crUrg===u?' on':''}" style="--uc:${URGENCY_COLORS[u]}" onclick="crUrg=crUrg==='${u}'?'':'${u}';render()"><b>${cnt(u)}</b>${u}</button>`).join('')}
@@ -1220,7 +1220,7 @@ function linkify(html){ return html.replace(/https:\/\/maps\.google\.com\/\?q=([
    אותו מבנה ומפתחות כמו בסקריפט המיילים — כך שלא נספרת התרעה כפולה. */
 const ALERT_START = '2026-10-19';
 let _sweepAt = 0;
-function alertWorkers(){ return (S.team||[]).filter(m => m.name && !/מנהל/.test(m.role||'') && m.kind !== 'קבלן' && !/קבלן/.test(m.role||'')); }
+function alertWorkers(){ return (S.team||[]).filter(m => m.name && !HOURS_ADMINS.includes(m.name) && m.kind !== 'קבלן' && !/קבלן/.test(m.role||'')); }
 function isWorkDay(d){ return new Date(d + 'T12:00:00').getDay() <= 4; }
 function alertSweep(){
   if (READONLY || !USER || !S || Date.now() - _sweepAt < 10 * 60000) return;
@@ -1277,7 +1277,7 @@ function alertBanner(){
   return `<div class="card" style="background:#FFF7E6;border:1.5px solid #E08A2E;color:#8A5A12;font-weight:700">⚠️ יש לך ${st.length % 3 || 3} התרעות על אי-דיווח נוכחות. עוד ${left} והנושא עובר להנהלה.</div>`;
 }
 function alertsAdminCard(){
-  const team = (S.team||[]).filter(m => !/מנהל/.test(m.role||'') && m.kind !== 'קבלן' && !/קבלן/.test(m.role||''));
+  const team = (S.team||[]).filter(m => !HOURS_ADMINS.includes(m.name) && m.kind !== 'קבלן' && !/קבלן/.test(m.role||''));
   const ex = (ALERTS.exempt||{})[today()] || {};
   const rows = team.map(m => ({ m, st: strikesOf(m.name), red: (ALERTS.red||{})[m.name] }));
   const noEmail = team.filter(m => !m.email);
@@ -3362,7 +3362,7 @@ function wlDayStatusCard(){
   if (!wlDay) wlDay = today();
   const d = wlDay;
   const logs = WLOGS.filter(l => l.date === d);
-  const expected = (S.team||[]).filter(m => !/מנהל/.test(m.role||'') && m.kind !== 'קבלן' && !/קבלן/.test(m.role||''));
+  const expected = (S.team||[]).filter(m => !HOURS_ADMINS.includes(m.name) && m.kind !== 'קבלן' && !/קבלן/.test(m.role||''));
   const wrote = {}, inCrew = {};
   logs.forEach(l => {
     const n = l.createdByName || '';
