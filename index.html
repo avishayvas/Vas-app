@@ -1120,8 +1120,8 @@ function buildCallsReport(){
 function exportCallsXlsx(){
   const rows = callReportRows();
   if (!rows.length){ toastMsg('אין קריאות לפי הסינון'); return; }
-  const aoa = [['#','תאריך פתיחה','שעה','פותח הקריאה','לקוח','סניף','מהות התקלה','דחיפות','סטטוס','טכנאי','טלפון']];
-  rows.forEach((r,i) => aoa.push([i+1, fmtDate(r.c.created||''), r.c.createdTime||'', r.opener, r.client, r.branch, r.fault, r.c.urgency||'', r.c.status||'', r.c.technician||'', r.c.phone||'']));
+  const aoa = [['#','תאריך פתיחה','שעה','פותח הקריאה','לקוח','סניף','ח.פ','כתובת','מהות התקלה','דחיפות','סטטוס','טכנאי','טלפון']];
+  rows.forEach((r,i) => { const b = branchByName(r.c.customer) || {}; aoa.push([i+1, fmtDate(r.c.created||''), r.c.createdTime||'', r.opener, b.l || r.client, r.branch, b.h || '', b.a || '', r.fault, r.c.urgency||'', r.c.status||'', r.c.technician||'', r.c.phone||'']); });
   downloadXlsx(aoa, 'קריאות שירות', 'vas-calls-' + crFrom + '-to-' + crTo + '.xlsx');
 }
 function printCallsReport(){
@@ -2384,29 +2384,29 @@ function importBackup(e){
   e.target.value = '';
 }
 const MAXSTOCK_BRANCHES = [
-  { n:"ביג מקס — חיפה", m:"דוד אגבייב", p:"054-4453124" },
-  { n:"מיקה מקס — בני ברק", m:"טל כהן", p:"052-8801183" },
-  { n:"מקס אילת", m:"אושרי ממו", p:"052-6737100" },
-  { n:"מקס אור עקיבא", m:"מאור מרציאנו", p:"054-4247741" },
-  { n:"מקס אמות באר שבע", m:"מאיר דהן", p:"050-6521252" },
-  { n:"מקס אשדוד", m:"מאור וקנין", p:"050-4443871" },
-  { n:"מקס אשקלון", m:"עופר קרידיי", p:"050-8130109" },
-  { n:"מקס בארות יצחק", m:"שי וקנין", p:"054-7544445" },
-  { n:"מקס בית שמש", m:"עמית וסקר", p:"052-4794240" },
-  { n:"מקס בת ים", m:"סמי", p:"053-9633720" },
-  { n:"מקס גדרה", m:"ראוף", p:"052-8952891" },
-  { n:"מקס ירושלים (יפו 234)", m:"שרון דרעאי", p:"050-3343313" },
-  { n:"מקס דימונה", m:"הראל דהן", p:"050-2078532" },
-  { n:"מקס חדרה", m:"בר כהן", p:"052-3855344" },
-  { n:"מקס חולון", m:"שלומי בן וקנין", p:"052-4708780" },
-  { n:"מקס טבריה", m:"דביר בן חמו", p:"054-9790871" },
-  { n:"מקס יבנה", m:"מיקי סלק", p:"054-9517070" },
-  { n:"מקס כפר סבא", m:"ארז שוורץ", p:"052-2427742" },
-  { n:"מקס כרמיאל", m:"רבקה", p:"052-6806605" },
-  { n:"מקס מודיעין", m:"לירן ממו", p:"054-6787315" },
-  { n:"מקס מישור אדומים", m:"ארז דהן", p:"053-2272711" },
-  { n:"מקס נהריה", m:"גל אלפסי", p:"054-7751199" },
-  { n:"מקס נוף הגליל", m:"אושרי מרציאנו", p:"054-9102444" },
+  { n:"ביג מקס — חיפה", m:"דוד אגבייב", p:"054-4453124", a:"חלוצי התעשיה 71, חיפה", h:"515456002", l:"ביג מקס בע\"מ" },
+  { n:"מיקה מקס — בני ברק", m:"טל כהן", p:"052-8801183", a:"הלחי 37, בני ברק", h:"514880558", l:"מיקה מקס בע\"מ" },
+  { n:"מקס אילת", m:"אושרי ממו", p:"052-6737100", a:"הסתת 17, אילת", h:"515593333", l:"מקס אילת בע\"מ" },
+  { n:"מקס אור עקיבא", m:"מאור מרציאנו", p:"054-4247741", a:"שדרות הנשיא ויצמן 1, אור עקיבא", h:"517129763", l:"מקס אורות אור עקיבא 2025 בע\"מ" },
+  { n:"מקס אמות באר שבע", m:"מאיר דהן", p:"050-6521252", a:"חיל הנדסה 10, מרכז מקס אמות, באר שבע", h:"515715688", l:"מקס אמות באר שבע בע\"מ" },
+  { n:"מקס אשדוד", m:"מאור וקנין", p:"050-4443871", a:"בעלי המלאכה 4, אשדוד", h:"515268993", l:"מקס אשדוד בע\"מ" },
+  { n:"מקס אשקלון", m:"עופר קרידי", p:"050-8130109", a:"הפנינים 40, אשקלון", h:"515914711", l:"מקס אשקלון בע\"מ" },
+  { n:"מקס בארות יצחק", m:"שי וקנין", p:"054-7544445", a:"מתחם מבנה, בארות יצחק", h:"516648565", l:"מקס בארות יצחק בע\"מ" },
+  { n:"מקס בית שמש", m:"עמית וסקר", p:"052-4794240", a:"מורדי הגטאות 6, בית שמש", h:"515036333", l:"מקס בית שמש בע\"מ" },
+  { n:"מקס בת ים", m:"סמי", p:"053-9633720", a:"העצמאות 67, בת ים", h:"516808417", l:"מקס בת ים 2023 בע\"מ" },
+  { n:"מקס גדרה", m:"ראוף", p:"052-8952891", a:"אברהם דורון 1, גדרה", h:"516863545", l:"מקס גדרה בע\"מ" },
+  { n:"מקס ירושלים (יפו 234)", m:"שרון דרעאי", p:"050-3343313", a:"יפו 234, ירושלים", h:"516714482", l:"מקס ירושלים 2022 בע\"מ" },
+  { n:"מקס דימונה", m:"הראל דהן", p:"050-2078532", a:"גולדה מאיר 20, דימונה", h:"515153500", l:"מקס דימונה בע\"מ" },
+  { n:"מקס חדרה", m:"בר כהן", p:"052-3855344", a:"מתחם מיקס, צה\"ל 35, חדרה", h:"514234913", l:"מקס חדרה בע\"מ" },
+  { n:"מקס חולון", m:"שלומי בן אבו", p:"052-4708780", a:"הפלד 7, חולון", h:"515914729", l:"מקס חולון בע\"מ" },
+  { n:"מקס טבריה", m:"דביר בן חמו", p:"054-9790871", a:"יהודה הלוי 1, טבריה", h:"515359768", l:"מקס טבריה בע\"מ" },
+  { n:"מקס יבנה", m:"מיקי סלק", p:"054-9517070", a:"דרך הים 11, יבנה", h:"516837218", l:"מקס יבנה בע\"מ" },
+  { n:"מקס כפר סבא", m:"ארז שוורץ", p:"052-2427742", a:"עתיר ידע 1, כפר סבא", h:"515153542", l:"מקס כפר סבא בע\"מ" },
+  { n:"מקס כרמיאל", m:"רבקה", p:"052-6806605", a:"מעלה כמון 9, כרמיאל", h:"516205622", l:"מקס כרמיאל בע\"מ" },
+  { n:"מקס מודיעין", m:"לירן ממו", p:"054-6787315", a:"שדרות המלאכות 125, ישפרו סנטר, מודיעין", h:"515666923", l:"מקס מודיעין בע\"מ" },
+  { n:"מקס מישור אדומים", m:"ארז דגני", p:"053-2272711", a:"מתחם די סיטי, מישור אדומים", h:"516690955", l:"מקס מישור אדומים בע\"מ" },
+  { n:"מקס נהריה", m:"גל אלפסי", p:"054-7751199", a:"מתחם חאמד סנטר, נהריה", h:"516482643", l:"מקס נהריה בע\"מ" },
+  { n:"מקס נוף הגליל", m:"אושרי מרציאנו", p:"054-9102444", a:"מעלה יצחק 29, נוף הגליל", h:"516430725", l:"מקס נוף הגליל בע\"מ" },
   { n:"מקס נשר", m:"סאלח אבו שיבאן", p:"052-7076050" },
   { n:"מקס נתיבות", m:"דודו ממן", p:"050-7434990" },
   { n:"מקס נתניה (יד יהלום)", m:"מתי חג'ג'", p:"050-2446133" },
@@ -2428,6 +2428,17 @@ const MAXSTOCK_BRANCHES = [
   { n:"מקס טל חנן — נשר", m:"סאלח", p:"052-7076050" }
 ];
 function branchByName(n){ return MAXSTOCK_BRANCHES.find(b=>b.n===n); }
+function maxProjectId(){ const p = (S.projects||[]).find(x => x.active && x.name.indexOf('מקס') !== -1); return p ? p.id : ''; }
+function branchSite(b){
+  if (!b) return { kind:'fixed', name:'', address:'', client:'', phone:'', notes:'' };
+  return { kind:'branch', name:b.n, address:b.a||'', client:(b.l||'מקס סטוק') + (b.h ? ' · ח.פ ' + b.h : ''), phone:[b.m, b.p].filter(Boolean).join(' · '), notes:'', hp:b.h||'', legal:b.l||'', manager:b.m||'' };
+}
+function branchInfoHtml(b){
+  if (!b) return '';
+  return `<div class="task-notes" style="margin-top:8px;background:#EEF3FA;color:#2B4E77;line-height:1.7">
+    <b>${esc(b.l || b.n)}</b>${b.h?` · ח.פ ${esc(b.h)}`:''}<br>
+    ${b.a?`📍 ${esc(b.a)}<br>`:''}👤 מנהל: ${esc(b.m||'—')}${b.p?` · <a href="tel:${esc(b.p)}">📞 ${esc(b.p)}</a>`:''}</div>`;
+}
 function openReportModal(kind, id, nextStatus){
   const arr = kind === 'task' ? S.tasks : S.calls;
   const x = arr.find(i=>i.id===id); if (!x) return;
@@ -3471,7 +3482,7 @@ function openWlogForm(id){
   };
   pendingPhotos = (WF.media||[]).map(m=>({ id:m.id, kind:m.kind }));
   window.MEDIA_MAX = 6;
-  if (ex) WF.siteSel = ex.site && ex.site.kind==='casual' ? 'casual:'+(ex.site.name||'') : 'p:'+ex.projectId;
+  if (ex) WF.siteSel = ex.site && ex.site.kind==='casual' ? 'casual:'+(ex.site.name||'') : ex.site && ex.site.kind==='branch' ? 'b:'+MAXSTOCK_BRANCHES.findIndex(b=>b.n===ex.site.name) : 'p:'+ex.projectId;
   modalShell(ex ? "עריכת יומן " + wlNum(ex.number) : 'יומן עבודה חדש', `
     <div class="wl-head">
       <div><span class="settings-sub">תאריך</span><br><b>${esc(fmtDate(WF.date))}</b></div>
@@ -3522,11 +3533,13 @@ function wlSiteOptions(){
   const saved = (WLSITES||[]).map(s=>`<option value="s:${esc(s.id)}"${WF.siteSel==='s:'+s.id?' selected':''}>${esc(s.name)}${s.address?' — '+esc(s.address):''}</option>`).join('');
   return `<option value="">— בחר —</option>
     <optgroup label="פרויקטים">${fixed}</optgroup>
+    <optgroup label="סניפי מקס סטוק">${MAXSTOCK_BRANCHES.map((b,i)=>`<option value="b:${i}"${WF.siteSel==='b:'+i?' selected':''}>${esc(b.n)}</option>`).join('')}</optgroup>
     ${saved?`<optgroup label="אתרים מזדמנים שנשמרו">${saved}</optgroup>`:''}
     <optgroup label="חדש"><option value="new"${String(WF.siteSel).startsWith('casual')?' selected':''}>＋ אתר / לקוח מזדמן חדש</option></optgroup>`;
 }
 function wlCasualBlock(){
   const s = WF.site;
+  if (s.kind === 'branch') return branchInfoHtml(MAXSTOCK_BRANCHES.find(b=>b.n===s.name));
   if (WF.site.kind !== 'casual') return '';
   return `<div class="wl-casual">
     <label>שם האתר / הלקוח *</label><input id="wf_sname" value="${esc(s.name)}" oninput="WF.site.name=this.value">
@@ -3546,6 +3559,8 @@ function wlPickSite(v){
   if (v.startsWith('p:')){
     const p = (S.projects||[]).find(x=>x.id===v.slice(2));
     WF.projectId = p?p.id:''; WF.site = { kind:'fixed', name:p?p.name:'', address:'', client:p?p.client||'':'', phone:'', notes:'' };
+  } else if (v.startsWith('b:')){
+    WF.projectId = maxProjectId(); WF.site = branchSite(MAXSTOCK_BRANCHES[+v.slice(2)]);
   } else if (v.startsWith('s:')){
     const s = (WLSITES||[]).find(x=>x.id===v.slice(2));
     WF.projectId = ''; WF.site = Object.assign({ kind:'casual', name:'', address:'', client:'', phone:'', notes:'' }, s||{}, { kind:'casual' });
@@ -3818,7 +3833,7 @@ function buildWlogWorkbook(logs, tasks, calls){
   sheet('רשימת יומנים',
     [["מס' יומן",10],['תאריך',12],['פרויקט / אתר',26],['סוג',10],['כתובת',24],['לקוח',18],['טלפון',14],['מילא היומן',14],
      ['עובדים',26],['שורות עבודה',11],['סה"כ שעות',11],['תמונות',9],['הערות המזמין',30],['הערות נציג החברה',30],['חתימה',9]],
-    logs.map(l=>[wlNum(l.number),d(l.date),wlSiteName(l), l.site&&l.site.kind==='casual'?'מזדמן':'פרויקט',
+    logs.map(l=>[wlNum(l.number),d(l.date),wlSiteName(l), l.site&&l.site.kind==='casual'?'מזדמן':l.site&&l.site.kind==='branch'?'סניף מקס':'פרויקט',
       (l.site&&l.site.address)||'',(l.site&&l.site.client)||'',(l.site&&l.site.phone)||'',l.createdByName||'',
       (l.crew||[]).map(c=>c.name).join(', '),(l.work||[]).length,l.totalHours||0,(l.media||[]).length,l.clientNotes||'',l.companyNotes||'',l.signId?'חתום':'']));
 
