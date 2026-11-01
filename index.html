@@ -2226,6 +2226,16 @@ function renderSettings(){
           <span class="settings-badge">${p.active?'פעיל':'מושהה'}</span>
         </div>`).join('')}
     </div>
+    ${isAdmin() ? `<div class="card">
+      <div class="card-title">אתרים מזדמנים שנשמרו (${(WLSITES||[]).length})</div>
+      <div class="settings-sub" style="margin:-4px 0 6px">אתרים שנשמרו מתוך יומן עבודה. לחיצה — עריכת השם והפרטים או מחיקה.</div>
+      ${(WLSITES||[]).length ? (WLSITES||[]).slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'','he')).map(x=>`
+        <div class="settings-row" onclick="openSiteForm('${esc(x.id)}')">
+          <div><div class="settings-name">${esc(x.name)}</div>
+          <div class="settings-sub">${[x.address, x.client, x.phone].filter(Boolean).map(esc).join(' · ') || '—'}</div></div>
+          <span class="settings-badge">${WLOGS.filter(l=>l.site&&l.site.id===x.id).length} יומנים</span>
+        </div>`).join('') : '<div class="empty">אין אתרים שמורים</div>'}
+    </div>` : ''}
     <div class="card">
       <div class="card-title"><span>צוות ${helpBtn('team')}</span> ${(!READONLY&&isAdmin())?'<button class="btn-mini" onclick="openMemberForm()">＋ הוספה</button>':''}</div>
       ${['עובד','קבלן'].map(kind=>`
@@ -2296,6 +2306,54 @@ function openProjForm(id){
       ${(p&&isAdmin())?`<button class="btn-danger" onclick="deleteProj('${p.id}')">מחיקה</button>`:''}
       <button class="btn-primary" onclick="saveProj('${p?p.id:''}')">שמירה</button>
     </div>`);
+}
+function openSiteForm(id){
+  if (!isAdmin()) return;
+  const x = (WLSITES||[]).find(s=>s.id===id); if (!x) return;
+  const used = WLOGS.filter(l=>l.site&&l.site.id===id).length;
+  modalShell('עריכת אתר', `
+    <label>שם האתר / הלקוח *</label><input id="sf_name" value="${esc(x.name)}">
+    <label>כתובת</label><input id="sf_addr" value="${esc(x.address||'')}">
+    <div class="form-2col">
+      <div><label>איש קשר</label><input id="sf_client" value="${esc(x.client||'')}"></div>
+      <div><label>טלפון</label><input id="sf_phone" type="tel" dir="ltr" value="${esc(x.phone||'')}"></div>
+    </div>
+    <label>פרטים</label><input id="sf_notes" value="${esc(x.notes||'')}">
+    ${used?`<label class="toggle-row"><input id="sf_logs" type="checkbox" checked> לעדכן גם ב-${used} יומנים קיימים</label>`:''}
+    <div class="form-actions">
+      <button class="btn-danger" onclick="deleteSite('${esc(id)}')">מחיקה</button>
+      <button class="btn-primary" onclick="saveSite('${esc(id)}')">שמירה</button>
+    </div>`);
+}
+async function saveSite(id){
+  const x = (WLSITES||[]).find(s=>s.id===id); if (!x) return;
+  const name = document.getElementById('sf_name').value.trim();
+  if (!name){ toastMsg('חסר שם'); return; }
+  const upd = { name, address: document.getElementById('sf_addr').value.trim(), client: document.getElementById('sf_client').value.trim(),
+    phone: document.getElementById('sf_phone').value.trim(), notes: document.getElementById('sf_notes').value.trim() };
+  try {
+    await WL_SITES.doc(id).set(Object.assign({}, x, upd));
+    Object.assign(x, upd);
+    const cb = document.getElementById('sf_logs');
+    if (cb && cb.checked){
+      for (const l of WLOGS.filter(l=>l.site&&l.site.id===id)){
+        await WL_COL.doc(l.id).set({ site: Object.assign({}, l.site, upd) }, { merge: true });
+      }
+    }
+    pushLog('עדכן אתר: ' + name);
+    closeModal(); render(); toastMsg('האתר עודכן ✓');
+  } catch(e){ console.error(e); toastMsg('שגיאה בשמירה'); }
+}
+async function deleteSite(id){
+  const x = (WLSITES||[]).find(s=>s.id===id); if (!x) return;
+  const used = WLOGS.filter(l=>l.site&&l.site.id===id).length;
+  if (!confirm('למחוק את האתר "' + x.name + '" מרשימת הבחירה?' + (used ? '\n' + used + ' היומנים שכבר נרשמו עליו יישארו כמו שהם.' : ''))) return;
+  try {
+    await WL_SITES.doc(id).delete();
+    WLSITES = WLSITES.filter(s=>s.id!==id);
+    pushLog('מחק אתר: ' + x.name);
+    closeModal(); render(); toastMsg('האתר נמחק');
+  } catch(e){ console.error(e); toastMsg('שגיאה במחיקה'); }
 }
 async function saveProj(id){
   const name = document.getElementById('pf_name').value.trim();
