@@ -1,4 +1,4 @@
-const CACHE = 'vas-app-v30';
+const CACHE = 'vas-app-v31';
 const SHELL = ['/Vas-app/', '/Vas-app/index.html', '/Vas-app/manifest.json', '/Vas-app/icon-192.png', '/Vas-app/icon-180.png', '/Vas-app/icon-512.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -11,6 +11,14 @@ self.addEventListener('fetch', e => {
   // never cache firebase/google requests - let SDK handle offline
   if (url.hostname.includes('googleapis.com') || url.hostname.includes('firebaseio.com') || url.hostname.includes('gstatic.com') && url.pathname.includes('firebasejs')) return;
   if (e.request.method !== 'GET') return;
+  // דפים (HTML): קודם מהרשת — כדי שכל עדכון יופיע מיד; בלי אינטרנט — מהמטמון
+  if (e.request.mode === 'navigate' || (url.origin === location.origin && url.pathname.endsWith('.html'))) {
+    e.respondWith(fetch(e.request, { cache: 'no-store' }).then(res => {
+      if (res.ok){ const copy = res.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); }
+      return res;
+    }).catch(() => caches.match(e.request).then(r => r || caches.match('/Vas-app/index.html'))));
+    return;
+  }
   e.respondWith(
     caches.match(e.request).then(cached => {
       const fresh = fetch(e.request).then(res => {
