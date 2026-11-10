@@ -810,7 +810,16 @@ function startData(){
     CHECKINS = (snap.exists && snap.data().list) || [];
     if (S) render();
   }, e => console.warn('checkins:', e.code));
-  unsubData = DOC.onSnapshot(snap => {
+  unsubData = DOC.onSnapshot({ includeMetadataChanges: false }, snap => {
+  if (snap.exists && snap.metadata.fromCache && !window._cacheState) window._cacheState = JSON.stringify(snap.data());
+  if (snap.exists && !snap.metadata.fromCache && window._cacheState && !window._recUploaded){
+    window._recUploaded = true;
+    const cs = stateSize(window._cacheState), ss = stateSize(snap.data());
+    if (cs >= 10 && ss < cs * 0.6){
+      // המכשיר הזה מחזיק עותק ישן ומלא יותר ממה שבשרת — שומרים אותו לשחזור
+      PHOTOS.doc('punch_recover_' + (USER || 'device') + '_' + Date.now()).set({ data: window._cacheState, at: new Date().toISOString(), by: USER || '', size: cs, src: 'cache' }).catch(()=>{});
+    }
+  }
   setConn(true);
   if (!snap.exists) {
     // מסמך לא נמצא — לעולם לא כותבים נתוני דוגמה לשרת. אם זה מהמטמון (בלי קליטה / מכשיר חדש) — מחכים לשרת
@@ -2241,6 +2250,7 @@ function renderSettings(){
         </div>
       </div>
     </div>
+    ${recoveryCard()}
     <div class="card">
       <div class="card-title">פרויקטים ${(!READONLY&&isAdmin())?'<button class="btn-mini" onclick="openProjForm()">＋ הוספה</button>':''}</div>
       ${S.projects.map(p=>`
@@ -2437,6 +2447,62 @@ async function deleteMember(id){
   await persist(); closeModal(); render(); toastMsg('איש הצוות נמחק');
 }
 
+/* ==================== שחזור נתונים ==================== */
+// מיזוג: מוסיף כל מה שחסר לפי מזהה, ובמזהה קיים שומר את הגרסה המעודכנת יותר
+function mergeState(src){
+  if (S._seed){ S = { projects:[], team:[], tasks:[], calls:[], checkins:[], log:S.log||[] }; }
+  let added = 0;
+  ['projects','team','tasks','calls'].forEach(k => {
+    const cur = S[k] = S[k] || [];
+    (src[k] || []).forEach(x => {
+      if (!x || !x.id) return;
+      const i = cur.findIndex(y => y.id === x.id);
+      if (i < 0){ cur.push(x); added++; }
+      else if ((x.updatedAt||x.created||'') > (cur[i].updatedAt||cur[i].created||'')) cur[i] = x;
+    });
+  });
+  // צוות מנתוני דוגמה שלא היה בנתונים המקוריים — מוסר (למשל עובד שעזב)
+  if (src.team && src.team.length){
+    const keep = new Set(src.team.map(m => m.name));
+    S.team = S.team.filter(m => keep.has(m.name) || !['t1','t2','t3','t4','t5','t6','t7','t8','t9','t10','t11','t12'].includes(m.id));
+  }
+  pushLog('שחזור נתונים: נוספו ' + added + ' רשומות');
+  return { added };
+}
+function persistForce(){ serverState = null; delete S._seed; return persist(); }
+let RECOVERY = null;
+async function loadRecovery(){
+  const out = [];
+  try {
+    const FP = firebase.firestore.FieldPath.documentId();
+    const qs = await PHOTOS.where(FP, '>=', 'punch_').where(FP, '<', 'punch`').get();
+    qs.forEach(d => { if (/^punch_(backup|recover)/.test(d.id)){ const x = d.data(); out.push({ id:d.id, at:x.at||'', by:x.by||'', size: x.size || stateSize(x.data) }); } });
+  } catch(e){ console.warn(e); }
+  RECOVERY = out.sort((a,b) => b.size - a.size || b.at.localeCompare(a.at));
+  render();
+}
+async function restoreFrom(id){
+  if (!isAdmin()) return;
+  const r = (RECOVERY||[]).find(x=>x.id===id); if (!r) return;
+  if (!confirm(`למזג את הגיבוי מ-${(r.at||'').slice(0,16).replace('T',' ')} (${r.size} רשומות) לנתונים הנוכחיים?\nשום דבר שקיים לא יימחק.`)) return;
+  try {
+    const snap = await PHOTOS.doc(id).get();
+    const res = mergeState(JSON.parse(snap.data().data));
+    await persistForce(); render(); toastMsg(`שוחזר ✓ נוספו ${res.added} רשומות`);
+  } catch(e){ console.error(e); toastMsg('שגיאה בשחזור'); }
+}
+function recoveryCard(){
+  if (!isAdmin()) return '';
+  if (RECOVERY === null){ setTimeout(loadRecovery, 0); RECOVERY = []; }
+  return `<div class="card">
+    <div class="card-title">🛟 שחזור נתונים ${'<button class="btn-tiny" onclick="loadRecovery()">רענון</button>'}</div>
+    <div class="settings-sub" style="margin:-4px 0 8px">עותקים שנשמרו בשרת: גיבויים יומיים, וגיבוי אוטומטי מכל מכשיר שהחזיק נתונים מלאים יותר מהשרת. השחזור ממזג — לא מוחק.</div>
+    ${RECOVERY.length ? RECOVERY.slice(0,12).map(r=>`<div class="settings-row">
+      <div><div class="settings-name">${r.id.startsWith('punch_recover')?'📱 עותק ממכשיר':'💾 גיבוי'} · ${esc((r.at||'').slice(0,16).replace('T',' '))}</div>
+      <div class="settings-sub">${r.size} רשומות${r.by?' · '+esc(r.by):''}</div></div>
+      <button class="btn-tiny ok" onclick="restoreFrom('${esc(r.id)}')">מיזוג</button></div>`).join('') : '<div class="empty">אין עותקים זמינים</div>'}
+  </div>`;
+}
 /* ---------- Backup ---------- */
 function exportBackup(){
   const data = { projects:S.projects, team:S.team, tasks:S.tasks.map(t=>({...t})), calls:S.calls, exported: new Date().toISOString() };
@@ -2456,10 +2522,9 @@ function importBackup(e){
     try {
       const data = JSON.parse(ev.target.result);
       if (!data.projects || !data.team) throw new Error('bad file');
-      if (!confirm('השחזור ידרוס את הנתונים הנוכחיים. להמשיך?')) return;
-      S.projects = data.projects; S.team = data.team;
-      S.tasks = data.tasks || []; S.calls = data.calls || [];
-      await persist(); render(); toastMsg('הגיבוי שוחזר ✓');
+      if (!confirm('לשחזר מהקובץ? הנתונים ימוזגו עם מה שקיים — שום דבר שקיים לא יימחק.')) return;
+      const r = mergeState(data);
+      await persistForce(); render(); toastMsg(`שוחזר ✓ נוספו ${r.added} רשומות`);
     } catch(err){ toastMsg('קובץ גיבוי לא תקין'); }
   };
   reader.readAsText(file);
