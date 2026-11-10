@@ -1438,6 +1438,7 @@ function renderHome(){
 
   return `
     ${openLeadsHtml}
+    ${isAdmin() && (S.tasks||[]).length + (S.calls||[]).length < 3 ? recoveryCard().replace('<div class="card">','<div class="card" style="border:2px solid #D64545;background:#FFF8F8">') : ''}
     ${alertBanner()}
     ${ciHtml}
     ${isHoursAdmin() ? alertsAdminCard() : ''}
