@@ -813,8 +813,9 @@ function startData(){
   unsubData = DOC.onSnapshot(snap => {
   setConn(true);
   if (!snap.exists) {
-    S = JSON.parse(JSON.stringify(SEED));
-    if (!READONLY) DOC.set(S).catch(()=>{});
+    // מסמך לא נמצא — לעולם לא כותבים נתוני דוגמה לשרת. אם זה מהמטמון (בלי קליטה / מכשיר חדש) — מחכים לשרת
+    if (snap.metadata.fromCache) { setConn(false); return; }
+    S = JSON.parse(JSON.stringify(SEED)); S._seed = true;
   } else {
     S = snap.data();
     S.projects = S.projects || []; S.team = S.team || [];
@@ -885,9 +886,32 @@ async function importIntake(docId, d){
 }
 let serverState = null;
 
+function stateSize(st){ try { const o = typeof st === 'string' ? JSON.parse(st) : st; return (o.tasks||[]).length + (o.calls||[]).length + (o.projects||[]).length + (o.team||[]).length; } catch(e){ return 0; } }
+let _bkDay = '';
 function persist(){
   if (READONLY) { toastMsg('מצב צפייה — אין אפשרות לערוך'); return Promise.resolve(); }
-  try { if (serverState) PHOTOS.doc('punch_backup').set({ data: serverState, at: new Date().toISOString(), by: USER||'' }).catch(()=>{}); } catch(e){}
+  if (!S || S._seed) { toastMsg('⚠️ הנתונים עוד לא נטענו מהשרת — השמירה בוטלה'); return Promise.resolve(); }
+  // הגנה: שמירה שמוחקת חלק גדול מהנתונים בבת אחת נחסמת
+  if (serverState){
+    const before = stateSize(serverState), after = stateSize(S);
+    if (before >= 10 && after < before * 0.6){
+      toastMsg('⛔ השמירה נחסמה — נראה שחסרים נתונים. רעננו את האפליקציה');
+      console.error('persist blocked', before, after);
+      return Promise.resolve();
+    }
+  }
+  try {
+    if (serverState){
+      PHOTOS.doc('punch_backup').set({ data: serverState, at: new Date().toISOString(), by: USER||'' }).catch(()=>{});
+      // גיבוי יומי נפרד — נשמר פעם ביום ולא נדרס באותו יום
+      const d = today();
+      if (_bkDay !== d){
+        _bkDay = d;
+        const ref = PHOTOS.doc('punch_backup_' + d);
+        ref.get().then(x => { if (!x.exists) ref.set({ data: serverState, at: new Date().toISOString(), by: USER||'', size: stateSize(serverState) }); }).catch(()=>{});
+      }
+    }
+  } catch(e){}
   return DOC.set(S).catch(e => {
     console.error(e); setConn(false);
     if (e && e.code === 'permission-denied') toastMsg('❌ אין הרשאת כתיבה — יש לפרסם את חוקי Firestore');
