@@ -229,10 +229,11 @@ main { padding: 14px 14px 150px; max-width: 760px; margin: 0 auto; }  /* מרו�
 .wl-head{display:flex;gap:12px;flex-wrap:wrap;background:#F4F6FA;border-radius:10px;padding:10px;margin-bottom:10px;font-size:13px}
 .wl-casual{background:#FBF3C4;border:1px dashed #C9962E;border-radius:10px;padding:10px;margin-top:8px}
 .wl-line{display:grid;grid-template-columns:20px 1fr 66px 74px 28px;gap:5px;align-items:center;margin-bottom:6px}
-.wl-line.wl-crew{grid-template-columns:20px 1fr 84px 84px 42px 1fr 28px}
+.wl-line.wl-crew{grid-template-columns:20px 1fr 84px 84px 64px 1fr 28px}
 .wl-line input,.wl-line select{margin:0!important;padding:8px 6px!important;font-size:15px}
 .wl-i{font:600 12px ui-monospace,monospace;color:#8A8F9C;text-align:center}
 .wl-h{font:700 14px ui-monospace,monospace;color:#1B3A6B;text-align:center}
+.wl-hin{font:700 14px ui-monospace,monospace;color:#1B3A6B;text-align:center;width:100%;min-width:52px;padding:8px 4px;border:1.5px solid #E2DFD5;border-radius:8px;background:#fff}
 .wl-x{border:0;background:transparent;color:#D64545;font-size:17px;cursor:pointer;padding:2px}
 .wl-view{font-size:14px}
 .wl-row{display:flex;gap:8px;justify-content:space-between;border-bottom:1px solid #EEF1F6;padding:6px 0}
@@ -241,9 +242,9 @@ main { padding: 14px 14px 150px; max-width: 760px; margin: 0 auto; }  /* מרו�
   .wl-line{grid-template-columns:20px 1fr 28px;grid-template-areas:"i d x" ". q q"}
   .wl-line>.wl-i{grid-area:i}.wl-line>.wl-desc{grid-area:d}.wl-line>.wl-x{grid-area:x}
   .wl-line>.wl-q{grid-area:q}.wl-line>.wl-u{grid-area:q;justify-self:end;max-width:46%}
-  .wl-line.wl-crew{grid-template-columns:20px 1fr 1fr 28px;grid-template-areas:"i d d x" ". t1 t2 h" ". n n n"}
+  .wl-line.wl-crew{grid-template-columns:20px 1fr 1fr 64px;grid-template-areas:"i d d x" ". t1 t2 h" ". n n n"}
   .wl-crew>.wl-t:nth-of-type(1){grid-area:t1}.wl-crew>.wl-t:nth-of-type(2){grid-area:t2}
-  .wl-crew>.wl-h{grid-area:h}.wl-crew>.wl-n{grid-area:n}
+  .wl-crew>.wl-h,.wl-crew>.wl-hin{grid-area:h}.wl-crew>.wl-n{grid-area:n}.wl-crew>.wl-x{justify-self:center}
 }
 
 </style>
@@ -3516,7 +3517,10 @@ function stopWlogSync(){ if (unsubWL){ unsubWL(); unsubWL = null; } WLOGS = []; 
 
 const wlHours = (a,b) => { if(!a||!b) return 0; const [h1,m1]=a.split(':').map(Number), [h2,m2]=b.split(':').map(Number);
   const t=(h2*60+m2)-(h1*60+m1); return t>0 ? Math.round(t/60*100)/100 : 0; };
-const wlTotal = f => (f.crew||[]).reduce((s,c)=>s+wlHours(c.from,c.to),0);
+// שעות לעובד: לפי שעת התחלה וסיום אם הוזנו, אחרת מספר השעות שהוקלד ידנית
+const crewHours = c => (c.from && c.to) ? wlHours(c.from, c.to) : (Math.round((parseFloat(String(c.hours==null?'':c.hours).replace(',','.')) || 0) * 100) / 100);
+const wlTotal = f => Math.round((f.crew||[]).reduce((s,c)=>s+crewHours(c),0) * 100) / 100;
+const crewSpan = c => (c.from && c.to) ? c.from + '–' + c.to + ' · ' : '';
 const wlNum = n => n==null ? '----' : String(n).padStart(4,'0');
 const wlQty = v => { const n = parseFloat(String(v==null?'':v).replace(',','.')); return isNaN(n) ? (v||'') : n; };
 const wlSiteName = l => l.site && l.site.name ? l.site.name : projName(l.projectId);
@@ -3606,7 +3610,7 @@ function openWlogView(id){
       <div class="wl-sec">תאור העבודה שבוצעה</div>
       ${(l.work||[]).map((w,i)=>`<div class="wl-row"><span>${i+1}. ${esc(w.desc)}</span><b>${esc(String(w.qty))} ${esc(w.unit)}</b></div>`).join('')}
       <div class="wl-sec">עובדים ושעות</div>
-      ${(l.crew||[]).map(c=>`<div class="wl-row"><span>${esc(c.name)}${c.note?' · '+esc(c.note):''}</span><b>${esc(c.from)}–${esc(c.to)} · ${c.hours} ש'</b></div>`).join('')}
+      ${(l.crew||[]).map(c=>`<div class="wl-row"><span>${esc(c.name)}${c.note?' · '+esc(c.note):''}</span><b>${esc(crewSpan(c))}${c.hours} ש'</b></div>`).join('')}
       <div class="wl-row" style="font-weight:800"><span>סה"כ שעות</span><b>${wlTotal(l)}</b></div>
       ${l.clientNotes?`<div class="wl-sec">הערות המזמין / המפקח</div><div>${esc(l.clientNotes)}</div>`:''}
       ${l.companyNotes?`<div class="wl-sec">הערות נציג החברה</div><div>${esc(l.companyNotes)}</div>`:''}
@@ -3744,13 +3748,14 @@ function wlCrewLines(){
     </select>
     <input class="wl-t" type="time" value="${esc(c.from)}" onchange="WF.crew[${i}].from=this.value;wlSum()">
     <input class="wl-t" type="time" value="${esc(c.to)}" onchange="WF.crew[${i}].to=this.value;wlSum()">
-    <span class="wl-h" id="wf_h${i}">${wlHours(c.from,c.to)}</span>
+    <input class="wl-hin" id="wf_h${i}" inputmode="decimal" placeholder="שעות" title="אפשר להקליד שעות בלי שעת התחלה וסיום" value="${crewHours(c)||''}" oninput="WF.crew[${i}].hours=this.value;if(this.value){WF.crew[${i}].from='';WF.crew[${i}].to='';wlClearTimes(${i});}wlSum(true)">
     <input class="wl-n" value="${esc(c.note||'')}" placeholder="הערה" oninput="WF.crew[${i}].note=this.value">
     <button class="wl-x" onclick="wlDelCrew(${i})" title="הסרה">✕</button>
   </div>`).join('');
 }
-function wlSum(){
-  (WF.crew||[]).forEach((c,i)=>{ const el=document.getElementById('wf_h'+i); if(el) el.textContent = wlHours(c.from,c.to); });
+function wlClearTimes(i){ document.querySelectorAll('.wl-crew')[i]?.querySelectorAll('input[type=time]').forEach(x=>x.value=''); }
+function wlSum(fromHours){
+  (WF.crew||[]).forEach((c,i)=>{ const el=document.getElementById('wf_h'+i); if(el && !(fromHours && document.activeElement===el)) el.value = crewHours(c)||''; });
   const t = document.getElementById('wf_total'); if (t) t.textContent = wlTotal(WF);
 }
 function wlAddWork(){ WF.work.push({desc:'',qty:'',unit:"יח'"}); document.getElementById('wf_work').innerHTML = wlWorkLines(); }
@@ -3782,7 +3787,7 @@ async function saveWlog(){
   if (!work.length){ toastMsg('חסרה לפחות שורת עבודה אחת'); return; }
   const bad = work.find(w=>!(parseFloat(String(w.qty).replace(',','.'))>0));
   if (bad){ toastMsg('חסרה כמות בשורה: ' + bad.desc.slice(0,28) + ' — אם אין כמות, לרשום 1 קומפ׳'); return; }
-  const crew = WF.crew.filter(c=>c.name).map(c=>({name:c.name, from:c.from, to:c.to, hours:wlHours(c.from,c.to), note:c.note||''}));
+  const crew = WF.crew.filter(c=>c.name).map(c=>({name:c.name, from:(c.from&&c.to)?c.from:'', to:(c.from&&c.to)?c.to:'', hours:crewHours(c), note:c.note||''}));
   if (!crew.length){ toastMsg('צריך לפחות עובד אחד'); return; }
   const noH = crew.find(c=>!c.hours);
   if (noH){ toastMsg('חסרות שעות תקינות אצל ' + noH.name); return; }
@@ -4130,7 +4135,7 @@ function wlogText(l){
   m += `\n*בוצע:*\n`;
   (l.work||[]).forEach((w,i)=>{ m += `${i+1}. ${w.desc} — ${w.qty} ${w.unit}\n`; });
   m += `\n*עובדים:*\n`;
-  (l.crew||[]).forEach(c=>{ m += `▫️ ${c.name} ${c.from}–${c.to} (${c.hours} ש')\n`; });
+  (l.crew||[]).forEach(c=>{ m += `▫️ ${c.name} ${crewSpan(c)}${c.hours} ש'\n`; });
   m += `סה"כ ${l.totalHours||0} שעות\n`;
   if (l.clientNotes) m += `\nהערות המזמין: ${l.clientNotes}\n`;
   if (l.companyNotes) m += `הערות נציג החברה: ${l.companyNotes}\n`;
