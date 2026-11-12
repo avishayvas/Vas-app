@@ -3639,7 +3639,7 @@ function openWlogForm(id){
   if (ex) WF.siteSel = ex.site && ex.site.kind==='casual' ? 'casual:'+(ex.site.name||'') : ex.site && ex.site.kind==='branch' ? 'b:'+MAXSTOCK_BRANCHES.findIndex(b=>b.n===ex.site.name||b.o===ex.site.name) : 'p:'+ex.projectId;
   modalShell(ex ? "עריכת יומן " + wlNum(ex.number) : 'יומן עבודה חדש', `
     <div class="wl-head">
-      <div><span class="settings-sub">תאריך</span><br><b>${esc(fmtDate(WF.date))}</b></div>
+      <div><span class="settings-sub">תאריך העבודה</span><br><input type="date" id="wf_date" value="${esc(WF.date)}" max="${today()}" onchange="WF.date=this.value||today();" style="padding:4px 6px;font-weight:700;font-family:inherit;border:1.5px solid #E2DFD5;border-radius:8px;max-width:150px"></div>
       <div><span class="settings-sub">ממלא היומן</span><br><b>${esc(WF.crew[0]&&ex?ex.createdByName:USER)}</b></div>
       <div><span class="settings-sub">מס' יומן</span><br><b>${WF.number!=null?wlNum(WF.number):'יינתן בשמירה'}</b></div>
     </div>
@@ -3775,6 +3775,7 @@ async function saveWlog(){
   WF.clientNotes = (document.getElementById('wf_cnotes')||{value:''}).value.trim();
   WF.companyNotes = (document.getElementById('wf_onotes')||{value:''}).value.trim();
   WF.signName = (document.getElementById('rp_signname')||{value:''}).value.trim();
+  { const dv = (document.getElementById('wf_date')||{}).value; if (dv){ if (dv > today()){ toastMsg('תאריך העבודה לא יכול להיות עתידי'); return; } WF.date = dv; } }
   if (WF.site.kind==='casual' && !WF.site.name.trim()){ toastMsg('חסר שם האתר / הלקוח'); return; }
   if (WF.site.kind==='fixed' && !WF.projectId){ toastMsg('צריך לבחור פרויקט או אתר'); return; }
   const work = WF.work.filter(w=>w.desc.trim());
@@ -3808,7 +3809,7 @@ async function saveWlog(){
   if (WF.number == null) WF.number = await wlNextNumber();
   const now = new Date().toISOString();
   const log = {
-    id: WF.id, number: WF.number, date: WF.date,
+    id: WF.id, number: WF.number, date: (document.getElementById('wf_date')||{}).value || WF.date,
     createdBy: WF.createdBy || (authUser?authUser.uid:''), createdByName: WF.createdByName || USER,
     createdAt: WF.createdAt || now, updatedAt: now, updatedByName: USER,
     projectId: WF.projectId || '', site: WF.site,
